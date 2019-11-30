@@ -103,7 +103,6 @@ task buildDefaultConfig {
   dependsOn processDefaultOutputs
   outputs.dir "${defaultOutputs}/conf"
 }
-
 task buildTransportModules {
   dependsOn processTransportOutputs
   outputs.dir "${transportOutputs}/modules"
@@ -119,9 +118,9 @@ void copyModule(Sync copyTask, Project module) {
         String name = module.plugins.hasPlugin('elasticsearch.esplugin') ? module.esplugin.name : module.es_meta_plugin.name 
         // Copy all non config/bin files
         // Note these might be unde a subdirectory in the case of a meta plugin
-        if ((details.relativePath.pathString ==~ /([^\/]+\/)?(config|bin)\/.*/) == false) {
+        if ((details.relativePath.pathString ==~ /([^\/]+\/)?(conf|bin)\/.*/) == false) {
           details.relativePath = details.relativePath.prepend('modules', name)
-        } else if ((details.relativePath.pathString ==~ /([^\/]+\/)(config|bin)\/.*/)) {
+        } else if ((details.relativePath.pathString ==~ /([^\/]+\/)(conf|bin)\/.*/)) {
           // this is the meta plugin case, in which we need to remove the intermediate dir
           String[] segments = details.relativePath.segments
           details.relativePath = new RelativePath(true, segments.takeRight(segments.length - 1))
@@ -148,12 +147,15 @@ project.rootProject.subprojects.findAll { it.parent.path == ':modules' }.each { 
     copyModule(processTransportOutputs, module)
   }
 
-  // make sure the module's integration tests run after the integ-test-zip (ie rest tests)
-  module.afterEvaluate({
-    module.integTest.mustRunAfter(':distribution:archives:integ-test-zip:integTest')
-  })
   restTestExpansions['expected.modules.count'] += 1
 }
+
+// make sure we have a clean task since we aren't a java project, but we have tasks that
+// put stuff in the build dir
+task customClean(type: Delete) {
+  delete 'build'
+}
+clean.dependsOn customClean
 
 configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
   // TODO: the map needs to be an input of the tasks, so that when it changes, the task will re-run...
@@ -318,30 +320,6 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
   }
 
 }
-
-/*
-task run(type: RunTask) {
-  distribution = System.getProperty('run.distribution', 'zip')
-  if (distribution == 'zip') {
-    String licenseType = System.getProperty("run.license_type", "basic")
-    if (licenseType == 'trial') {
-      setting 'xpack.ml.enabled', 'true'
-      setting 'xpack.graph.enabled', 'true'
-      setting 'xpack.watcher.enabled', 'true'
-      setting 'xpack.license.self_generated.type', 'trial'
-      setupCommand 'setupTestAdmin',
-        'bin/elasticsearch-users', 'useradd', 'elastic-admin', '-p', 'elastic-password', '-r', 'superuser'
-    } else if (licenseType != 'basic') {
-      throw new IllegalArgumentException("Unsupported self-generated license type: [" + licenseType + "[basic] or [trial].")
-    }
-    setting 'xpack.security.enabled', 'true'
-    setting 'xpack.monitoring.enabled', 'true'
-    setting 'xpack.sql.enabled', 'true'
-    setting 'xpack.rollup.enabled', 'true'
-    keystoreSetting 'bootstrap.password', 'password'
-  }
-}
-*/
 
 /**
  * Build some variables that are replaced in the packages. This includes both

@@ -15,17 +15,9 @@ List projects = [
   'client:client-benchmark-noop-api-plugin',
   'client:benchmark',
   'benchmarks',
-  'distribution:archives:integ-test-zip',
-  'distribution:archives:oss-zip',
   'distribution:archives:zip',
-  'distribution:archives:oss-tar',
   'distribution:archives:tar',
-  'distribution:docker',
-  'distribution:docker:oss-docker-build-context',
-  'distribution:docker:docker-build-context',
-  'distribution:packages:oss-deb',
   'distribution:packages:deb',
-  'distribution:packages:oss-rpm',
   'distribution:packages:rpm',
   'distribution:bwc:bugfix',
   'distribution:bwc:maintenance',
@@ -39,7 +31,6 @@ List projects = [
   'test:framework',
   'test:fixtures:hdfs-fixture',
   'test:fixtures:krb5kdc-fixture',
-  'test:fixtures:old-elasticsearch',
   'test:logger-usage'
 ]
 
@@ -78,7 +69,6 @@ project(':example-plugins').projectDir = new File(rootProject.projectDir, 'plugi
 addSubProjects('', new File(rootProject.projectDir, 'libs'))
 addSubProjects('', new File(rootProject.projectDir, 'modules'))
 addSubProjects('', new File(rootProject.projectDir, 'plugins'))
-addSubProjects('', new File(rootProject.projectDir, 'qa'))
 
 List startTasks = gradle.startParameter.taskNames
 

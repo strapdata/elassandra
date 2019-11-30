@@ -57,14 +57,14 @@ buildscript {
     }
   }
   dependencies {
-    classpath 'com.netflix.nebula:gradle-ospackage-plugin:4.7.1'
+    classpath 'com.netflix.nebula:gradle-ospackage-plugin:8.0.3'
   }
 }
 
 void addProcessFilesTask(String type, boolean oss) {
-  String packagingFiles = "build/packaging/${ oss ? 'oss-' : ''}${type}"
+  String packagingFiles = "build/packaging/${type}"
 
-  task("process${oss ? 'Oss' : ''}${type.capitalize()}Files", type: Copy) {
+  task("process${type.capitalize()}Files", type: Copy) {
     into packagingFiles
 
     with copySpec {
@@ -91,17 +91,15 @@ void addProcessFilesTask(String type, boolean oss) {
   }
 }
 addProcessFilesTask('deb', true)
-addProcessFilesTask('deb', false)
 addProcessFilesTask('rpm', true)
-addProcessFilesTask('rpm', false)
 
 // Common configuration that is package dependent. This can't go in ospackage
 // since we have different templated files that need to be consumed, but the structure
 // is the same
 Closure commonPackageConfig(String type, boolean oss) {
   return {
-    dependsOn "process${oss ? 'Oss' : ''}${type.capitalize()}Files"
-    packageName "elasticsearch${oss ? '-oss' : ''}"
+    dependsOn "process${type.capitalize()}Files"
+    packageName "elassandra"
     // Follow elasticsearch's file naming convention
     archiveName "${packageName}-${project.version}.${type}"
 
@@ -225,13 +223,13 @@ Closure commonPackageConfig(String type, boolean oss) {
       fileType CONFIG | NOREPLACE
       permissionGroup 'cassandra'
       fileMode 0660
-      from "${packagingFiles}/env/elasticsearch"
+      from "${packagingFiles}/env/cassandra"
     }
 
     // ========= systemd =========
-    configurationFile '/usr/lib/systemd/system/elasticsearch.service'
+    configurationFile '/usr/lib/systemd/system/cassandra.service'
     into('/usr/lib/tmpfiles.d') {
-      from "${packagingFiles}/systemd/cassazndra.conf"
+      from "${packagingFiles}/systemd/cassandra.conf"
       fileMode 0644
     }
     into('/usr/lib/systemd/system') {
@@ -281,25 +279,25 @@ apply plugin: 'nebula.ospackage-base'
 
 // this is package indepdendent configuration
 ospackage {
-  maintainer 'Elasticsearch Team <info@elastic.co>'
+  maintainer 'Strapdata Team <support@strapdata.com>'
   summary '''
-    Elasticsearch is a distributed RESTful search engine built for the cloud.
-    Reference documentation can be found at
-    https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html
-    and the 'Elasticsearch: The Definitive Guide' book can be found at
-    https://www.elastic.co/guide/en/elasticsearch/guide/current/index.html
+    Elassandra is a multi-master distributed database and search engine from strapdata.com
+    Reference documentation can be found at https://doc.elassandra.io and
+    commercial support is available form https://www.strapdata.com
     '''.stripIndent().replace('\n', ' ').trim()
-  url 'https://www.elastic.co/'
+  url 'https://www.strapdata.com/'
 
   // signing setup
+  /*
   if (project.hasProperty('signing.password') && System.getProperty('build.snapshot', 'true') == 'false') {
-    signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'D88E42B4'
+    signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'C58CE2B6'
     signingKeyPassphrase = project.property('signing.password')
     signingKeyRingFile = project.hasProperty('signing.secretKeyRingFile') ?
             project.file(project.property('signing.secretKeyRingFile')) :
             new File(new File(System.getProperty('user.home'), '.gnupg'), 'secring.gpg')
   }
 
+*/
   requires('coreutils')
 
   fileMode 0644
@@ -307,21 +305,15 @@ ospackage {
   user 'root'
   permissionGroup 'root'
 
-  into '/usr/share/elasticsearch'
+  into '/usr/share/cassandra'
   with noticeFile
 }
 
-Closure commonDebConfig(boolean oss) {
+Closure commonDebConfig() {
   return {
-    configure(commonPackageConfig('deb', oss))
+    configure(commonPackageConfig('deb', true))
 
-    // jdeb does not provide a way to set the License control attribute, and ospackage
-    // silently ignores setting it. Instead, we set the license as "custom field"
-    if (oss) {
-      customFields['License'] = 'ASL-2.0'
-    } else {
-      customFields['License'] = 'Elastic-License'
-    }
+    customFields['License'] = 'ASL-2.0'
 
     version = project.version
     packageGroup 'web'
@@ -330,40 +322,32 @@ Closure commonDebConfig(boolean oss) {
     requires 'adduser'
 
     into('/usr/share/lintian/overrides') {
-      from('src/deb/lintian/elasticsearch')
+      from('src/deb/lintian/cassandra')
     }
   }
 }
 
 task buildDeb(type: Deb) {
-  configure(commonDebConfig(false))
+  configure(commonDebConfig())
 }
 
-task buildOssDeb(type: Deb) {
-  configure(commonDebConfig(true))
-}
-
-Closure commonRpmConfig(boolean oss) {
+Closure commonRpmConfig() {
   return {
-    configure(commonPackageConfig('rpm', oss))
+    configure(commonPackageConfig('rpm', true))
 
-    if (oss) {
-      license 'ASL 2.0'
-    } else {
-      license 'Elastic License'
-    }
+    license 'ASL 2.0'
 
     packageGroup 'Application/Internet'
     requires '/bin/bash'
 
     prefix '/usr'
-    packager 'Elasticsearch'
+    packager 'Elassandra'
     version = project.version.replace('-', '_')
     release = '1'
     arch 'NOARCH'
     os 'LINUX'
-    distribution 'Elasticsearch'
-    vendor 'Elasticsearch'
+    distribution 'Elassandra'
+    vendor 'Strapdata'
     // TODO ospackage doesn't support icon but we used to have one
 
     // without this the rpm will have parent dirs of any files we copy in, eg /etc/elasticsearch
@@ -372,11 +356,7 @@ Closure commonRpmConfig(boolean oss) {
 }
 
 task buildRpm(type: Rpm) {
-  configure(commonRpmConfig(false))
-}
-
-task buildOssRpm(type: Rpm) {
-  configure(commonRpmConfig(true))
+  configure(commonRpmConfig())
 }
 
 Closure dpkgExists = { it -> new File('/bin/dpkg-deb').exists() || new File('/usr/bin/dpkg-deb').exists() || new File('/usr/local/bin/dpkg-deb').exists() }
@@ -448,17 +428,11 @@ subprojects {
         Path copyrightPath
         String expectedLicense
         String licenseFilename
-        if (project.name.contains('oss-')) {
-          copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/elasticsearch-oss/copyright")
-          expectedLicense = "ASL-2.0"
-          licenseFilename = "APACHE-LICENSE-2.0.txt"
-        } else {
-          copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/elasticsearch/copyright")
-          expectedLicense = "Elastic-License"
-          licenseFilename = "ELASTIC-LICENSE.txt"
-        }
+        copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/elassandra/copyright")
+        expectedLicense = "ASL-2.0"
+        licenseFilename = "APACHE-LICENSE-2.0.txt"
         final List<String> header = Arrays.asList("Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/",
-                "Copyright: Elasticsearch B.V. <info@elastic.co>",
+                "Copyright: Strapdata SAS <contact@strapdata.com>",
                 "License: " + expectedLicense)
         final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
         final List<String> expectedLines = header + licenseLines.collect { " " + it }
@@ -471,13 +445,9 @@ subprojects {
       onlyIf rpmExists
       doLast {
         String licenseFilename
-        if (project.name.contains('oss-')) {
-          licenseFilename = "APACHE-LICENSE-2.0.txt"
-        } else {
-          licenseFilename = "ELASTIC-LICENSE.txt"
-        }
+        licenseFilename = "APACHE-LICENSE-2.0.txt"
         final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
-        final Path licensePath = packageExtractionDir.toPath().resolve("usr/share/elasticsearch/LICENSE.txt")
+        final Path licensePath = packageExtractionDir.toPath().resolve("usr/share/cassandra/LICENSE.txt")
         assertLinesInFile(licensePath, licenseLines)
       }
     }
@@ -487,8 +457,8 @@ subprojects {
     dependsOn buildDist, checkExtraction
     onlyIf { (project.name.contains('deb') && dpkgExists.call(it)) || (project.name.contains('rpm') && rpmExists.call(it)) }
     doLast {
-      final List<String> noticeLines = Arrays.asList("Elasticsearch", "Copyright 2009-2018 Elasticsearch")
-      final Path noticePath = packageExtractionDir.toPath().resolve("usr/share/elasticsearch/NOTICE.txt")
+      final List<String> noticeLines = Arrays.asList("Strapdata", "Copyright 2017-2019 Strapdata")
+      final Path noticePath = packageExtractionDir.toPath().resolve("usr/share/cassandra/NOTICE.txt")
       assertLinesInFile(noticePath, noticeLines)
     }
   }
@@ -506,11 +476,7 @@ subprojects {
       exec.standardOutput = output
       doLast {
         String expectedLicense
-        if (project.name.contains('oss-')) {
-          expectedLicense = "ASL-2.0"
-        } else {
-          expectedLicense = "Elastic-License"
-        }
+        expectedLicense = "ASL-2.0"
         final Pattern pattern = Pattern.compile("\\s*License: (.+)")
         final String info = output.toString('UTF-8')
         final String[] actualLines = info.split("\n")
@@ -543,11 +509,7 @@ subprojects {
       doLast {
         String license = output.toString('UTF-8')
         String expectedLicense
-        if (project.name.contains('oss-')) {
-          expectedLicense = "ASL 2.0"
-        } else {
-          expectedLicense = "Elastic License"
-        }
+        expectedLicense = "ASL 2.0"
         if (license != expectedLicense) {
           throw new GradleException("expected license [${expectedLicense}] for [${-> buildDist.outputs.files.singleFile}] but was [${license}]")
         }
