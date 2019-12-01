@@ -150,6 +150,12 @@ project.rootProject.subprojects.findAll { it.parent.path == ':modules' }.each { 
   restTestExpansions['expected.modules.count'] += 1
 }
 
+// make sure we have a clean task since we aren't a java project, but we have tasks that
+// put stuff in the build dir
+task clean(type: Delete) {
+  delete 'build'
+}
+
 configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
   // TODO: the map needs to be an input of the tasks, so that when it changes, the task will re-run...
   /*****************************************************************************
@@ -247,7 +253,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
 
     homebinFiles = { distributionType, oss ->
       copySpec {
-        from 'packages/src/main/packaging/homebin'
+        from 'src/packaging/homebin'
         eachFile { it.setMode(0755) }
         MavenFilteringHack.filter(it, expansionsForDistribution(distributionType, oss))
       }
