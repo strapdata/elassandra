@@ -54,7 +54,10 @@ import java.util.function.Predicate;
  */
 public final class IndexScopedSettings extends AbstractScopedSettings {
 
-    public static final Predicate<String> INDEX_SETTINGS_KEY_PREDICATE = (s) -> s.startsWith(IndexMetaData.INDEX_SETTING_PREFIX);
+    public static final Predicate<String> INDEX_SETTINGS_KEY_PREDICATE =
+        (s) -> s.startsWith(IndexMetaData.INDEX_SETTING_PREFIX) &&
+              !s.equals(IndexMetaData.SETTING_NUMBER_OF_SHARDS) &&
+              !s.equals(IndexMetaData.SETTING_NUMBER_OF_REPLICAS);   // filter number of replicas that is dynamic in elassandra
 
     public static final Set<Setting<?>> BUILT_IN_INDEX_SETTINGS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
         MaxRetryAllocationDecider.SETTING_ALLOCATION_MAX_RETRY,
