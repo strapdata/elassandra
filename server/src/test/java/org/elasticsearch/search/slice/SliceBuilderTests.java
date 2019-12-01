@@ -494,7 +494,7 @@ public class SliceBuilderTests extends ESTestCase {
                 new SearchShardIterator(null, new ShardId("index", "index", 1), null, null)
             )
         );
-        when(routing.searchShards(any(), any(), any(), any())).thenReturn(it);
+        when(routing.searchShards(any(), any(), any(), null, any(), null, null, null, null)).thenReturn(it);
         when(clusterService.operationRouting()).thenReturn(routing);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         try (IndexReader reader = DirectoryReader.open(dir)) {

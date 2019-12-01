@@ -19,8 +19,6 @@
 
 package org.elasticsearch.action.admin.cluster.shards;
 
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
@@ -101,7 +99,7 @@ public class TransportClusterSearchShardsAction extends
 
         Set<String> nodeIds = new HashSet<>();
         GroupShardsIterator<ShardIterator> groupShardsIterator = clusterService.operationRouting()
-            .searchShards(clusterState, concreteIndices, routingMap, request.preference());
+            .searchShards(clusterState, concreteIndices, null, routingMap, request.preference(), null, null, request.remoteAddress(), null);
         ShardRouting shard;
         ClusterSearchShardsGroup[] groupResponses = new ClusterSearchShardsGroup[groupShardsIterator.size()];
         int currentGroup = 0;

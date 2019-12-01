@@ -21,7 +21,7 @@ package org.elasticsearch.cluster.routing;
 
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.logging.log4j.Logger;
+ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 import org.elassandra.index.search.TokenRangesService;
 import org.elasticsearch.Version;
@@ -85,28 +85,17 @@ public class OperationRouting {
     }
 
     public ShardIterator indexShards(ClusterState clusterState, String index, String id, @Nullable String routing) {
-        return shards(clusterState, index, id, routing).shardsIt();
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
     public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing,
-                                   @Nullable String preference) {
-        return preferenceActiveShardIterator(shards(clusterState, index, id, routing), clusterState.nodes().getLocalNodeId(),
-            clusterState.nodes(), preference, null, null);
+            @Nullable String preference) {
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
     public ShardIterator getShards(ClusterState clusterState, String index, int shardId, @Nullable String preference) {
-        final IndexShardRoutingTable indexShard = clusterState.getRoutingTable().shardRoutingTable(index, shardId);
-        return preferenceActiveShardIterator(indexShard, clusterState.nodes().getLocalNodeId(), clusterState.nodes(),
-            preference, null, null);
+        return shard(clusterState.metaData().index(index).getIndex());
     }
-
-    public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState,
-                                                           String[] concreteIndices,
-                                                           @Nullable Map<String, Set<String>> routing,
-                                                           @Nullable String preference) {
-        return searchShards(clusterState, concreteIndices, null, routing, preference, null, null, null, null);
-    }
-
 
     public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState,
                                                            String[] concreteIndices,

@@ -332,7 +332,7 @@ public class SliceBuilder implements Writeable, ToXContentObject {
         String[] indices = new String[] { request.shardId().getIndex().getName() };
         Map<String, Set<String>> routingMap = request.indexRoutings().length > 0 ?
             Collections.singletonMap(indices[0], Sets.newHashSet(request.indexRoutings())) : null;
-        return clusterService.operationRouting().searchShards(state, indices, routingMap, request.preference());
+        return clusterService.operationRouting().searchShards(state, indices, request.types(), routingMap, request.preference(), null, request.tokenRanges(), null, null);
     }
 
     @Override
