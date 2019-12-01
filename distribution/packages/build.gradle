@@ -85,8 +85,9 @@ void addProcessFilesTask(String type, boolean oss) {
       mkdir "${packagingFiles}/var/lib/cassandra"
       mkdir "${packagingFiles}/usr/share/cassandra/plugins"
 
-      // bare empty dir for /etc/elasticsearch
-      mkdir "${packagingFiles}/cassandra"
+      // bare empty dir for /etc/cassandra
+      mkdir "${packagingFiles}/etc/cassandra"
+      mkdir "${packagingFiles}/etc/cassandra/scripts"
     }
   }
 }
@@ -118,10 +119,13 @@ Closure commonPackageConfig(String type, boolean oss) {
 
     // top level "into" directive is not inherited from ospackage for some reason, so we must
     // specify it again explicitly for copying common files
+    into('/usr/bin') {
+      with binFiles(type, oss)
+      exclude 'cassandra.in.sh'
+      exclude 'cassandra'
+      exclude 'aliases.sh'
+    }
     into('/usr/share/cassandra') {
-      into('bin') {
-        with binFiles(type, oss)
-      }
       from(rootProject.projectDir) {
         include 'README.md'
         fileMode 0644
@@ -142,6 +146,9 @@ Closure commonPackageConfig(String type, boolean oss) {
           with sigarFiles(type, oss)
           exclude '*.dll'
         }
+      }
+      into('pylib') {
+        with pylibFiles(type, oss)
       }
       into('tools') {
         with copySpec {
@@ -200,7 +207,26 @@ Closure commonPackageConfig(String type, boolean oss) {
     configurationFile '/etc/cassandra/metrics-reporter-config-sample.yaml'
     configurationFile '/etc/cassandra/README.txt'
 
-   from("${packagingFiles}") {
+    into('/usr/bin') {
+      with cassandraBinFiles(type, oss)
+      with binFiles(type, oss)
+      fileMode 0755
+      user 'root'
+      permissionGroup 'root'
+      exclude '*.bat'
+      exclude '*.exe'
+      exclude '*.ps1'
+      exclude 'aliases.sh'
+      exclude 'cassandra.in.sh'
+    }
+    into('/usr/share/cassandra') {
+      with homebinFiles(type, oss)
+      fileMode 0755
+      user 'root'
+      permissionGroup 'root'
+    }
+
+    from("${packagingFiles}") {
      dirMode 02750
      into('/etc')
      permissionGroup 'cassandra'
@@ -281,14 +307,13 @@ apply plugin: 'nebula.ospackage-base'
 ospackage {
   maintainer 'Strapdata Team <support@strapdata.com>'
   summary '''
-    Elassandra is a multi-master distributed database and search engine from strapdata.com
+    Elassandra is a multi-master distributed database and search engine from strapdata.com.
     Reference documentation can be found at https://doc.elassandra.io and
     commercial support is available form https://www.strapdata.com
     '''.stripIndent().replace('\n', ' ').trim()
   url 'https://www.strapdata.com/'
 
   // signing setup
-  /*
   if (project.hasProperty('signing.password') && System.getProperty('build.snapshot', 'true') == 'false') {
     signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'C58CE2B6'
     signingKeyPassphrase = project.property('signing.password')
@@ -297,7 +322,6 @@ ospackage {
             new File(new File(System.getProperty('user.home'), '.gnupg'), 'secring.gpg')
   }
 
-*/
   requires('coreutils')
 
   fileMode 0644

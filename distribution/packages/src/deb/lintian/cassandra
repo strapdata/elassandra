@@ -1,0 +1,8 @@
+# Ignore arch dependent warnings, we chose the right libs on start
+cassandra binary: arch-independent-package-contains-binary-or-object
+# Not stripping external libraries
+cassandra binary: unstripped-binary-or-object
+# Ignore arch dependent warnings, we chose the right libs on start
+cassandra binary: arch-dependent-file-in-usr-share
+# Please check our changelog at https://github/strapdata/elassandra
+cassandra binary: changelog-file-missing-in-native-package

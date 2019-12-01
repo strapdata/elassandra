@@ -45,7 +45,7 @@ MAX_LOCKED_MEMORY=unlimited
 MAX_AS=unlimited
 MAX_NPROC=32768
 
-# Elasticsearch PID file directory
+# Elassandra PID file directory
 PID_DIR="/var/run/cassandra"
 
 # End of variables that can be overwritten in $DEFAULT
