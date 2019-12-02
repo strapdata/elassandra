@@ -49,17 +49,7 @@ import java.util.regex.Pattern
  *    dpkg -c path/to/elasticsearch.deb
  */
 
-buildscript {
-  repositories {
-    maven {
-      name "gradle-plugins"
-      url "https://plugins.gradle.org/m2/"
-    }
-  }
-  dependencies {
-    classpath 'com.netflix.nebula:gradle-ospackage-plugin:8.0.3'
-  }
-}
+
 
 void addProcessFilesTask(String type, boolean oss) {
   String packagingFiles = "build/packaging/${type}"
@@ -71,6 +61,10 @@ void addProcessFilesTask(String type, boolean oss) {
       from 'src/common'
       from "src/${type}"
       MavenFilteringHack.filter(it, expansionsForDistribution(type, oss))
+    }
+
+    into('pylib') {
+      with pylibFiles(type, oss)
     }
 
     into('etc/cassandra') {
@@ -88,6 +82,8 @@ void addProcessFilesTask(String type, boolean oss) {
       // bare empty dir for /etc/cassandra
       mkdir "${packagingFiles}/etc/cassandra"
       mkdir "${packagingFiles}/etc/cassandra/scripts"
+
+        mkdir "${packagingFiles}/pylib"
     }
   }
 }
@@ -355,10 +351,17 @@ Closure commonDebConfig() {
     into('/usr/share/lintian/overrides') {
       from('src/deb/lintian/cassandra')
     }
+
+    into('/usr/lib/python2.7/dist-packages') {
+      from "build/packaging/pylib/usr/lib/python2.7/dist-packages"
+      fileMode 0664
+    }
+    directory("/usr/lib/python2.7/dist-packages/cqlshlib", 0755)
   }
 }
 
 task buildDeb(type: Deb) {
+  dependsOn setupPylibDeb
   configure(commonDebConfig())
 }
 
@@ -391,6 +394,7 @@ Closure commonRpmConfig() {
 }
 
 task buildRpm(type: Rpm) {
+  dependsOn setupPylibRpm
   configure(commonRpmConfig())
 }
 

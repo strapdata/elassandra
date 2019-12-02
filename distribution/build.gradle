@@ -26,6 +26,18 @@ import org.elasticsearch.gradle.test.RunTask
 import java.nio.file.Files
 import java.nio.file.Path
 
+buildscript {
+  repositories {
+    maven {
+      name "gradle-plugins"
+      url "https://plugins.gradle.org/m2/"
+    }
+  }
+  dependencies {
+    classpath 'com.netflix.nebula:gradle-ospackage-plugin:8.0.3'
+  }
+}
+
 /*****************************************************************************
  *                  Third party dependencies report                          *
  *****************************************************************************/
@@ -156,6 +168,51 @@ task clean(type: Delete) {
   delete 'build'
 }
 
+configure(subprojects.findAll { ['packages'].contains(it.name) }) {
+  File packagingFiles = new File(buildDir, 'packaging')
+
+  task fillTmpPylibDir(type: Copy) {
+    println("Copying pylib")
+    from '../../server/cassandra/pylib'
+    into "${packagingFiles}/pylib"
+  }
+
+  task setupPylibDeb(type: Exec) {
+    dependsOn fillTmpPylibDir
+    workingDir "${packagingFiles}/pylib"
+    commandLine "python2", "setup.py", "install", "--no-compile",
+            "--root", "${workingDir}", "--install-lib", "usr/lib/python2.7/dist-packages"
+    outputs.dir "${workingDir}/usr/lib/python2.7/dist-packages"
+  }
+
+  task setupPylibRpm(type: Exec) {
+    dependsOn fillTmpPylibDir
+    workingDir "${packagingFiles}/pylib"
+    commandLine "python2", "setup.py", "install", "--no-compile",
+            "--root", "${workingDir}", "--install-lib", "usr/lib/python2.7/site-packages"
+    outputs.dir "${workingDir}/usr/lib/python2.7/site-packages"
+  }
+
+  apply plugin: 'nebula.ospackage-base'
+  ospackage {
+    println("COPYING pyfiles ################################ ")
+    if (project.name.toLowerCase().contains('rpm')) {
+      into('/usr/lib/python2.7/site-packages') {
+        from "${packagingFiles}/pylib/usr/lib/python2.7/site-packages"
+        fileMode 0664
+      }
+      directory("/usr/lib/python2.7/site-packages/cqlshlib", 0755)
+    }
+    else if (project.name.toLowerCase().contains('deb')) {
+      println("COPYING DEB")
+      into('/usr/lib/python2.7/dist-packages') {
+        from "${packagingFiles}/pylib/usr/lib/python2.7/dist-packages"
+        fileMode 0664
+      }
+      directory("/usr/lib/python2.7/dist-packages/cqlshlib", 0755)
+    }
+  }
+}
 configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
   // TODO: the map needs to be an input of the tasks, so that when it changes, the task will re-run...
   /*****************************************************************************
