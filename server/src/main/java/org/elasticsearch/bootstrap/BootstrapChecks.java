@@ -201,12 +201,12 @@ public final class BootstrapChecks {
         }
         checks.add(new ClientJvmCheck());
         checks.add(new UseSerialGCCheck());
-        checks.add(new SystemCallFilterCheck());
+        //checks.add(new SystemCallFilterCheck());
         checks.add(new OnErrorCheck());
         checks.add(new OnOutOfMemoryErrorCheck());
         checks.add(new EarlyAccessCheck());
         checks.add(new G1GCCheck());
-        checks.add(new AllPermissionCheck());
+        //checks.add(new AllPermissionCheck());
         return Collections.unmodifiableList(checks);
     }
 
@@ -702,8 +702,6 @@ public final class BootstrapChecks {
 
         boolean isAllPermissionGranted() {
             final SecurityManager sm = System.getSecurityManager();
-            if (sm == null)
-                return true;
             try {
                 sm.checkPermission(new AllPermission());
             } catch (final SecurityException e) {
