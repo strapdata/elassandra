@@ -601,18 +601,14 @@ public class ElassandraDaemon extends CassandraDaemon {
             keepAliveThread.setDaemon(false);
             keepAliveThread.start();
         } catch (Throwable e) {
-            Logger logger = Loggers.getLogger(ElassandraDaemon.class);
-            if (instance != null && instance.node != null) {
-                logger = Loggers.getLogger(ElassandraDaemon.class, instance.node.settings().get("name"));
-            }
             String errorMessage = buildErrorMessage(stage, e);
             if (foreground) {
                 System.err.println(errorMessage);
                 System.err.flush();
                 //Loggers.disableConsoleLogging();
             }
+            Logger logger = Loggers.getLogger(ElassandraDaemon.class);
             logger.error("Exception", e);
-
             System.exit(3);
         }
     }
