@@ -117,6 +117,8 @@ Closure commonPackageConfig(String type, boolean oss) {
       postTrans file("${scripts}/posttrans")
     }
 
+    requires('coreutils')
+
     // top level "into" directive is not inherited from ospackage for some reason, so we must
     // specify it again explicitly for copying common files
     into('/usr/bin') {
@@ -345,6 +347,11 @@ Closure commonDebConfig() {
     requires 'libc6'
     requires 'adduser'
 
+    requires('python', '2.7', GREATER | EQUAL)
+    requires('openjdk-8-jre-headless').or("java8-runtime")
+    recommends('ntp')
+    conflicts('cassandra')
+
     into('/usr/share/lintian/overrides') {
       from('src/deb/lintian/cassandra')
     }
@@ -363,6 +370,10 @@ Closure commonRpmConfig() {
 
     packageGroup 'Application/Internet'
     requires '/bin/bash'
+    requires('python', '2.7', GREATER | EQUAL)
+    requires('jre', "1.8.0", GREATER | EQUAL)
+    recommends('ntp')
+    conflicts('cassandra')
 
     prefix '/usr'
     packager 'Elassandra'
