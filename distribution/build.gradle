@@ -522,7 +522,7 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
 
     // signing setup
     if (project.hasProperty('signing.password') && System.getProperty('build.snapshot', 'true') == 'false') {
-      signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'D88E42B4'
+      signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'C58CE2B6'
       signingKeyPassphrase = project.property('signing.password')
       signingKeyRingFile = project.hasProperty('signing.secretKeyRingFile') ?
                            project.file(project.property('signing.secretKeyRingFile')) :
