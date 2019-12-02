@@ -88,6 +88,7 @@ Elasticsearch unsupported features
 * Elasticsearch percolator, reindex and shrink API are not supported.
 * Elasticsearch range fiels are supported in version 6.2
 * Parent-Child join is currently supported only in Elassandra version 5.5
+* Running Elassandra with a java security manager is not supported.
 
 Cassandra limitations
 ---------------------
