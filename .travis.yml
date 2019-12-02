@@ -2,6 +2,7 @@ dist: trusty
 sudo: required
 env:
   global:
+    - JAVA9_HOME=/home/travis/jdk-9.0.4
     # this variable determine when docker images are tagged  'latest'
     - LATEST_VERSION=6.2.3
     # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
@@ -15,6 +16,9 @@ env:
 language: 
   - java
   - bash
+
+jdk:
+  - oraclejdk8
 
 services:
   - docker
@@ -32,25 +36,36 @@ cache:
 
 before_install:
   - wget https://github.com/strapdata/bach/raw/master/install-jdk.sh
+  - chmod a+x install-jdk.sh
   # solves gpg server problems
   - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
   - wget -O ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
   - unzip ccm-elassandra.zip
   - cd ecm-ccm-elassandra
   - sudo ./setup.py install
+  - cd ..
 
-matrix:
-  include:
+#matrix:
+#  include:
 # Java 10 "Oracle JDK"
-    - env: JDK='Oracle JDK 10'
-      install: . ./install-jdk.sh -v -f 9; keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
+#    - env: JDK='Oracle JDK 10'
+#      install: . ./install-jdk.sh -v -f 9; keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
 
-install: ./gradlew --version
+install:
+  - export JAVA8_HOME=$JAVA_HOME
+  - ./install-jdk.sh -v -f 9;
+  - export JAVA_HOME=$JAVA9_HOME
+  - keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
+  - ./gradlew --version
 
 script:
   - ./gradlew server:test -Dbuild.snapshot=false
   - ./gradlew assemble -Dbuild.snapshot=false
-  - ./run-ccm-tests.sh
+  # switch to JDK8 to run CCM tests
+  - export JAVA_HOME=$JAVA8_HOME
+  - ./run-ccm-test.sh
+  # switch to JDK9 to publish
+  - export JAVA_HOME=$JAVA9_HOME
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
