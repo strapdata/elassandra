@@ -1,5 +1,7 @@
-6.8.4 - 2019-11-30
+6.8.4.0 - 2019-12-03
   * Upgrade to Elasticsearch 6.8.4
+  * Upgrade to Cassandra 3.11.5
+  * Known issue on geoshapes
 
 6.2.3.21 - 2018-10-16
   * Remove elastic_admin RF adjustment

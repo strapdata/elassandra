@@ -44,17 +44,13 @@ before_install:
   - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
 
 install:
-  - env
-  - pwd
-  - ls -lrt
   - ./install-jdk.sh -v -e -f 9;
-  - rm -f *.tar.gz
   - ./install-jdk.sh -v -e -f 12;
   - rm -f *.tar.gz
   - export JAVA8_HOME=$JAVA_HOME
   - export JAVA12_HOME=/home/travis/jdk-12.0.2
   - export JAVA_HOME=$JAVA12_HOME
-  #  - keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
+#  - keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
   - java -version
   - ./gradlew --version
   - ant -version

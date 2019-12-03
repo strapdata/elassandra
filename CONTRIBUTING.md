@@ -1,388 +1,104 @@
-Contributing to elasticsearch
-=============================
+# How to contribute
 
-Elasticsearch is an open source project and we love to receive contributions from our community — you! There are many ways to contribute, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests or writing code which can be incorporated into Elasticsearch itself.
+Elassandra is based on a fork of Elasticsearch acting as a plugin for Apache Cassandra :
+* The **ElassandraDaemon** class override the **CassandraDaemon** class in order to manage Elasticsearch internal services.
+* The **ElasticSecondaryIndex** class implements the Cassandra **Index** interface to write in Elasticsearch indices.
 
-Bug reports
------------
+![Elassandra class inheritance](/docs/elassandra/source/images/elassandra-inheritance.png)
 
-If you think you have found a bug in Elasticsearch, first make sure that you are testing against the [latest version of Elasticsearch](https://www.elastic.co/downloads/elasticsearch) - your issue may already have been fixed. If not, search our [issues list](https://github.com/elastic/elasticsearch/issues) on GitHub in case a similar issue has already been opened.
+To achieve these operations, both Cassandra and Elasticsearch requires some modifications located in two forks:
 
-It is very helpful if you can prepare a reproduction of the bug. In other words, provide a small test case which we can run to confirm your bug. It makes it easier to find the problem and to fix it. Test cases should be provided as `curl` commands which we can copy and paste into a terminal to run it locally, for example:
+A fork of [Apache Cassandra](http://git-wip-us.apache.org/repos/asf/cassandra.git) including slight modifications, see (https://github.com/strapdata/cassandra).
 
-```sh
-# delete the index
-curl -XDELETE localhost:9200/test
+A fork of Elasticsearch 5.5.0 (aka Strapdata-Elasticsearch, branch *${version}-strapdata*) including modifications in :
+* Cluster state management ([org.elassandra.cluster.InternalCassandraClusterService](/core/src/main/java/org/elassandra/cluster/InternalCassandraClusterService.java) override a modified [org.elasticsearch.cluster.service.InternalClusterService](/core/src/main/java/org/elasticsearch/cluster/service/InternalClusterService.java))
+* Gateway to retrieve Elasticsearch metadata on startup (see [org.elassandra.gateway](/core/src/main/java/org/elassandra/gateway/CassandraGatewayService.java))
+* Discovery to manage alive cluster members (see [org.elassandra.discovery.CassandraDiscovery](/core/src/main/java/org/elassandra/discovery/CassandraDiscovery.java))
+* Fields mappers to manage CQL mapping and Lucene field factory (see [org.elasticsearch.index.mapper.core](/core/src/main/java/org/elasticsearch/index/mapper/core))
+* Search requests routing (see [org.elassandra.cluster.routing](/core/src/main/java/org/elassandra/cluster/routing))
 
-# insert a document
-curl -XPUT localhost:9200/test/test/1 -d '{
- "title": "test document"
-}'
+As shown below, forked Cassandra and Elasticsearch projects can change independently and changes can be rebased periodically into Strapdata-Cassandra or Elassandra (aka Strapdata-Elasticsearch).
 
-# this should return XXXX but instead returns YYY
-curl ....
-```
+![Elassandra developpement process](/docs/elassandra/source/images/elassandra-devprocess.png)
 
-Provide as much information as you can. You may think that the problem lies with your query, when actually it depends on how your data is indexed. The easier it is for us to recreate your problem, the faster it is likely to be fixed.
+Elassandra contains 2 references to the [strapdata-cassandra](https://github.com/strapdata/cassandra) :
+* The Elassandra version 5+ **core/pom.xml** include a maven dependency on the strapdata-cassandra project
+* The Elassandra version 6+ **buildSrc/version.properties** include a gradle dependency on the strapdata-cassandra project.
+* In order to build the elassandra tarball and packages, the elassandra project includes a reference to the [strapdata-cassandra](https://github.com/strapdata/cassandra) as git submodule located in **core/cassandra** for version 5+ or **server/cassandra** for version 6+.
 
-Feature requests
-----------------
+Elassandra is an opensource project, contributors are welcome to rise issues or pull requests on both [strapdata-cassandra](https://github.com/strapdata/cassandra) or [elassandra](https://github.com/strapdata/elassandra) github repositories.
 
-If you find yourself wishing for a feature that doesn't exist in Elasticsearch, you are probably not alone. There are bound to be others out there with similar needs. Many of the features that Elasticsearch has today have been added because our users saw the need.
-Open an issue on our [issues list](https://github.com/elastic/elasticsearch/issues) on GitHub which describes the feature you would like to see, why you need it, and how it should work.
+## Bug reports
 
-Contributing code and documentation changes
--------------------------------------------
+When submitting an issue, please make sure that :
 
-If you have a bugfix or new feature that you would like to contribute to Elasticsearch, please find or open an issue about it first. Talk about what you would like to do. It may be that somebody is already working on it, or that there are particular issues that you should know about before implementing the change.
+* You are testing against the latest version of Elassandra.
+* You're not in the case of a known Elassandra limitation, see http://doc.elassandra.io/en/latest/limitations.html.
+* Elassandra behavior is abnormally different from the standard Cassandra or Elasticsearch. For example, like Elasticsearch, Elassandra does not display default mappings unless requested, but this is the expected behavior.
 
-We enjoy working with contributors to get their code accepted. There are many approaches to fixing a problem and it is important to find the best approach before writing too much code.
+It is very helpful if you can provide a test case to reproduce the bug and the associated error logs or stacktrace. See your **conf/logback.xml** to increase logging level in the **logs/system.log** file, and run **nodetool setlogginglevel** to dynamically update your logging level.
 
-Note that it is unlikely the project will merge refactors for the sake of refactoring. These
-types of pull requests have a high cost to maintainers in reviewing and testing with little
-to no tangible benefit. This especially includes changes generated by tools. For example,
-converting all generic interface instances to use the diamond operator.
+## Feature requests
 
-The process for contributing to any of the [Elastic repositories](https://github.com/elastic/) is similar. Details for individual projects can be found below.
+Your're welcome to rise an issue on https://github.com/strapdata/elassandra for new feature, describing why and how it should work.
 
-### Fork and clone the repository
+## Contributing code and documentation changes
 
-You will need to fork the main Elasticsearch code or documentation repository and clone it to your local machine. See
-[github help page](https://help.github.com/articles/fork-a-repo) for help.
+Contributors can clone repositories and follow guidelines from Elasticsearch and Cassandra :
+* [Contributing to the elasticsearch codebase](https://github.com/elastic/elasticsearch/blob/2.4/CONTRIBUTING.md#contributing-to-the-elasticsearch-codebase)
+* [Cassandra How To Contribute](https://wiki.apache.org/cassandra/HowToContribute)ls 
 
-Further instructions for specific projects are given below.
+When cloning Elassandra, use **git clone --recurse-submodules https://github.com/strapdata/elassandra** to clone the strapdata-cassandra submodule and check that your are using the same strapdata-cassandra version in  *core/pom.xm* for elassandra v5.x (or *buildSrc/version.properties* for v6.x) and in this submodule. Alternatively, this submodule can point to your own cassandra branch, assuming this branch include mandatory modifications to support Elassandra, see [strapdata-cassandra](https://github.com/strapdata/cassandra) for details.
+
+If you forgot the **--recurse-submodules** when cloning, you can also fetch the cassandra submodule with **git submodule update --init** and **git checkout cassandra-3.x-strapdata** to set the strapdata branch.
+
+Then, to build from sources: 
+
+* Elassandra v5.x:
+
+      gradle clean assemble -Dbuild.snapshot=false
+    
+    
+* Elassandra v6.2.x:
+      
+      export JAVA_HOME=/path/to/jdk-10
+      export CASSANDRA_JAVA_HOME=/path/to/jdk-8
+      ./gradlew clean assemble -Dbuild.snapshot=false
+
+* Elassandra v6.8.x:
+      
+      export JAVA8_HOME=/path/to/jdk-8
+      export JAVA9_HOME=/path/to/jdk-9
+      export JAVA12_HOME=/path/to/jdk-12
+      export JAVA_HOME=/path/to/jdk-12
+      export CASSANDRA_JAVA_HOME=/path/to/jdk-8
+      ./gradlew clean assemble -Dbuild.snapshot=false
+      
+Note: For elassandra v6.X, javadoc task failed due to [https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8194281](https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8194281).
+
+Elassandra documentation is based on [sphinx](http://www.sphinx-doc.org/en/stable/rest.html) and published on [readthedoc.org](https://readthedocs.org/). 
+Source RestructuredText files are located at [Elassandra source documentation](https://github.com/strapdata/elassandra/tree/master/docs/elassandra). 
+To build the documentation, just run **make html** from the *${project.dir}/docs/elassandra*.
 
 ### Submitting your changes
 
-Once your changes and tests are ready to submit for review:
+1. Test you changes
 
-1. Test your changes
+You can build Elassandra single-node unit tests mixing Elasticsearch and Cassandra CQL/nodetool requests. 
+See [Elassandra Testing](http://doc.elassandra.io/en/latest/testing.html) documentation and 
+existing [Elassandra unit tests](https://github.com/strapdata/elassandra/tree/master/core/src/test/java/org/elassandra). 
+For multi-nodes testing, you can use [ecm](https://github.com/strapdata/ecm), a fork of [ccm](https://github.com/pcmanus/ccm) 
+running Elassandra.
 
-    Run the test suite to make sure that nothing is broken. See the
-[TESTING](TESTING.asciidoc) file for help running tests.
+2. Rebase your changes
 
-2. Sign the Contributor License Agreement
+Like with Elasticsearch, update your local repository with the most recent code from the main Elassandra repository, 
+and rebase your branch on top of the latest master branch. We prefer your initial changes to be squashed into a single 
+commit. Later, if we ask you to make changes, add them as separate commits. This makes them easier to review. 
+As a final step before merging we will either ask you to squash all commits yourself or we'll do it for you.
 
-    Please make sure you have signed our [Contributor License Agreement](https://www.elastic.co/contributor-agreement/). We are not asking you to assign copyright to us, but to give us the right to distribute your code without restriction. We ask this of all contributors in order to assure our users of the origin and continuing existence of the code. You only need to sign the CLA once.
+3. Submit a pull request
 
-3. Rebase your changes
+Finally, push your local changes to your forked copy of the elassandra repository and [submit a pull request](https://help.github.com/articles/using-pull-requests). In the pull request, choose a title which sums up the changes that you have made, including the issue number (ex: #91 null_value support), and provide details about your changes.
 
-    Update your local repository with the most recent code from the main Elasticsearch repository, and rebase your branch on top of the latest master branch. We prefer your initial changes to be squashed into a single commit. Later, if we ask you to make changes, add them as separate commits.  This makes them easier to review.  As a final step before merging we will either ask you to squash all commits yourself or we'll do it for you.
-
-
-4. Submit a pull request
-
-    Push your local changes to your forked copy of the repository and [submit a pull request](https://help.github.com/articles/using-pull-requests). In the pull request, choose a title which sums up the changes that you have made, and in the body provide more details about what your changes do. Also mention the number of the issue where discussion has taken place, eg "Closes #123".
-
-Then sit back and wait. There will probably be discussion about the pull request and, if any changes are needed, we would love to work with you to get your pull request merged into Elasticsearch.
-
-Please adhere to the general guideline that you should never force push
-to a publicly shared branch. Once you have opened your pull request, you
-should consider your branch publicly shared. Instead of force pushing
-you can just add incremental commits; this is generally easier on your
-reviewers. If you need to pick up changes from master, you can merge
-master into your branch. A reviewer might ask you to rebase a
-long-running pull request in which case force pushing is okay for that
-request. Note that squashing at the end of the review process should
-also not be done, that can be done when the pull request is [integrated
-via GitHub](https://github.com/blog/2141-squash-your-commits).
-
-Contributing to the Elasticsearch codebase
-------------------------------------------
-
-**Repository:** [https://github.com/elastic/elasticsearch](https://github.com/elastic/elasticsearch)
-
-JDK 12 is required to build Elasticsearch. You must have a JDK 12 installation
-with the environment variable `JAVA_HOME` referencing the path to Java home for
-your JDK 12 installation. By default, tests use the same runtime as `JAVA_HOME`.
-However, since Elasticsearch supports JDK 8, the build supports compiling with
-JDK 12 and testing on a JDK 8 runtime; to do this, set `RUNTIME_JAVA_HOME`
-pointing to the Java home of a JDK 8 installation. Note that this mechanism can
-be used to test against other JDKs as well, this is not only limited to JDK 8.
-
-> Note: It is also required to have `JAVA8_HOME`, `JAVA9_HOME`, `JAVA10_HOME`
-and `JAVA11_HOME` available so that the tests can pass.
-
-> Warning: do not use `sdkman` for Java installations which do not have proper
-`jrunscript` for jdk distributions.
-
-Elasticsearch uses the Gradle wrapper for its build. You can execute Gradle
-using the wrapper via the `gradlew` script in the root of the repository.
-
-We support development in the Eclipse and IntelliJ IDEs. 
-For Eclipse, the minimum version that we support is [4.13][eclipse]. 
-For IntelliJ, the minimum version that we support is [IntelliJ 2017.2][intellij].
-
-Eclipse users can automatically configure their IDE: `./gradlew eclipse`
-then `File: Import: Gradle : Existing Gradle Project`.
-Additionally you will want to ensure that Eclipse is using 2048m of heap by modifying 
-`eclipse.ini` accordingly to avoid GC overhead and OOM errors.
-
-IntelliJ users can automatically configure their IDE: `./gradlew idea`
-then `File->New Project From Existing Sources`. Point to the root of
-the source directory, select
-`Import project from external model->Gradle`, enable
-`Use auto-import`. In order to run tests directly from
-IDEA 2017.2 and above, it is required to disable the IDEA run launcher in order to avoid
-`idea_rt.jar` causing "jar hell". This can be achieved by adding the
-`-Didea.no.launcher=true` [JVM
-option](https://intellij-support.jetbrains.com/hc/en-us/articles/206544869-Configuring-JVM-options-and-platform-properties).
-Alternatively, `idea.no.launcher=true` can be set in the
-[`idea.properties`](https://www.jetbrains.com/help/idea/file-idea-properties.html)
-file which can be accessed under Help > Edit Custom Properties (this will require a
-restart of IDEA). For IDEA 2017.3 and above, in addition to the JVM option, you will need to go to
-`Run->Edit Configurations->...->Defaults->JUnit` and verify that the `Shorten command line` setting is set to
-`user-local default: none`. You may also need to [remove `ant-javafx.jar` from your
-classpath](https://github.com/elastic/elasticsearch/issues/14348) if that is
-reported as a source of jar hell.
-
-To run an instance of elasticsearch from the source code run `./gradlew run`
-
-The Elasticsearch codebase makes heavy use of Java `assert`s and the
-test runner requires that assertions be enabled within the JVM. This
-can be accomplished by passing the flag `-ea` to the JVM on startup.
-
-For IntelliJ, go to
-`Run->Edit Configurations...->Defaults->JUnit->VM options` and input
-`-ea`.
-
-For Eclipse, go to `Preferences->Java->Installed JREs` and add `-ea` to
-`VM Arguments`.
-
-Please follow these formatting guidelines:
-
-* Java indent is 4 spaces
-* Line width is 140 characters
-* Lines of code surrounded by `// tag` and `// end` comments are included in the
-documentation and should only be 76 characters wide not counting
-leading indentation
-* The rest is left to Java coding standards
-* Disable “auto-format on save” to prevent unnecessary format changes. This makes reviews much harder as it generates unnecessary formatting changes. If your IDE supports formatting only modified chunks that is fine to do.
-* Wildcard imports (`import foo.bar.baz.*`) are forbidden and will cause the build to fail. This can be done automatically by your IDE:
- * Eclipse: `Preferences->Java->Code Style->Organize Imports`. There are two boxes labeled "`Number of (static )? imports needed for .*`". Set their values to 99999 or some other absurdly high value.
- * IntelliJ: `Preferences->Editor->Code Style->Java->Imports`. There are two configuration options: `Class count to use import with '*'` and `Names count to use static import with '*'`. Set their values to 99999 or some other absurdly high value.
-* Don't worry too much about import order. Try not to change it but don't worry about fighting your IDE to stop it from doing so.
-
-### License Headers
-
-We require license headers on all Java files. You will notice that all the Java files in
-the top-level `x-pack` directory contain a separate license from the rest of the repository. This
-directory contains commercial code that is associated with a separate license. It can be helpful
-to have the IDE automatically insert the appropriate license header depending which part of the project
-contributions are made to.
-
-#### IntelliJ: Copyright & Scope Profiles
-
-To have IntelliJ insert the correct license, it is necessary to create to copyright profiles.
-These may potentially be called `apache2` and `commercial`. These can be created in
-`Preferences/Settings->Editor->Copyright->Copyright Profiles`. To associate these profiles to
-their respective directories, two "Scopes" will need to be created. These can be created in
-`Preferences/Settings->Appearances & Behavior->Scopes`. When creating scopes, be sure to choose
-the `shared` scope type. Create a scope, `apache2`, with
-the associated pattern of `!file[group:x-pack]:*/`. This pattern will exclude all the files contained in
-the `x-pack` directory. The other scope, `commercial`, will have the inverse pattern of `file[group:x-pack]:*/`.
-The two scopes, together, should account for all the files in the project. To associate the scopes
-with their copyright-profiles, go into `Preferences/Settings->Editor>Copyright` and use the `+` to add
-the associations `apache2/apache2` and `commercial/commercial`.
-
-Configuring these options in IntelliJ can be quite buggy, so do not be alarmed if you have to open/close
-the settings window and/or restart IntelliJ to see your changes take effect.
-
-### Creating A Distribution
-
-Run all build commands from within the root directory:
-
-```sh
-cd elasticsearch/
-```
-
-To build a tar distribution, run this command:
-
-```sh
-./gradlew -p distribution/archives/tar assemble --parallel
-```
-
-You will find the distribution under:
-`./distribution/archives/tar/build/distributions/`
-
-To create all build artifacts (e.g., plugins and Javadocs) as well as
-distributions in all formats, run this command:
-
-```sh
-./gradlew assemble --parallel
-```
-
-The package distributions (Debian and RPM) can be found under:
-`./distribution/packages/(deb|rpm)/build/distributions/`
-
-The archive distributions (tar and zip) can be found under:
-`./distribution/archives/(tar|zip)/build/distributions/`
-
-### Running The Full Test Suite
-
-Before submitting your changes, run the test suite to make sure that nothing is broken, with:
-
-```sh
-./gradlew check
-```
-
-If your changes affect only the documentation, run:
-
-```sh
-./gradlew -p docs check
-```
-For more information about testing code examples in the documentation, see
-https://github.com/elastic/elasticsearch/blob/master/docs/README.asciidoc
-
-### Project layout
-
-This repository is split into many top level directories. The most important
-ones are:
-
-#### `docs`
-Documentation for the project.
-
-#### `distribution`
-Builds our tar and zip archives and our rpm and deb packages.
-
-#### `libs`
-Libraries used to build other parts of the project. These are meant to be
-internal rather than general purpose. We have no plans to
-[semver](https://semver.org/) their APIs or accept feature requests for them.
-We publish them to maven central because they are dependencies of our plugin
-test framework, high level rest client, and jdbc driver but they really aren't
-general purpose enough to *belong* in maven central. We're still working out
-what to do here.
-
-#### `modules`
-Features that are shipped with Elasticsearch by default but are not built in to
-the server. We typically separate features from the server because they require
-permissions that we don't believe *all* of Elasticsearch should have or because
-they depend on libraries that we don't believe *all* of Elasticsearch should
-depend on.
-
-For example, reindex requires the `connect` permission so it can perform
-reindex-from-remote but we don't believe that the *all* of Elasticsearch should
-have the "connect". For another example, Painless is implemented using antlr4
-and asm and we don't believe that *all* of Elasticsearch should have access to
-them.
-
-#### `plugins`
-Officially supported plugins to Elasticsearch. We decide that a feature should
-be a plugin rather than shipped as a module because we feel that it is only
-important to a subset of users, especially if it requires extra dependencies.
-
-The canonical example of this is the ICU analysis plugin. It is important for
-folks who want the fairly language neutral ICU analyzer but the library to
-implement the analyzer is 11MB so we don't ship it with Elasticsearch by
-default.
-
-Another example is the `discovery-gce` plugin. It is *vital* to folks running
-in [GCP](https://cloud.google.com/) but useless otherwise and it depends on a
-dozen extra jars.
-
-#### `qa`
-Honestly this is kind of in flux and we're not 100% sure where we'll end up.
-Right now the directory contains
-* Tests that require multiple modules or plugins to work
-* Tests that form a cluster made up of multiple versions of Elasticsearch like
-full cluster restart, rolling restarts, and mixed version tests
-* Tests that test the Elasticsearch clients in "interesting" places like the
-`wildfly` project.
-* Tests that test Elasticsearch in funny configurations like with ingest
-disabled
-* Tests that need to do strange things like install plugins that thrown
-uncaught `Throwable`s or add a shutdown hook
-But we're not convinced that all of these things *belong* in the qa directory.
-We're fairly sure that tests that require multiple modules or plugins to work
-should just pick a "home" plugin. We're fairly sure that the multi-version
-tests *do* belong in qa. Beyond that, we're not sure. If you want to add a new
-qa project, open a PR and be ready to discuss options.
-
-#### `server`
-The server component of Elasticsearch that contains all of the modules and
-plugins. Right now things like the high level rest client depend on the server
-but we'd like to fix that in the future.
-
-#### `test`
-Our test framework and test fixtures. We use the test framework for testing the
-server, the plugins, and modules, and pretty much everything else. We publish
-the test framework so folks who develop Elasticsearch plugins can use it to
-test the plugins. The test fixtures are external processes that we start before
-running specific tests that rely on them.
-
-For example, we have an hdfs test that uses mini-hdfs to test our
-repository-hdfs plugin.
-
-#### `x-pack`
-Commercially licensed code that integrates with the rest of Elasticsearch. The
-`docs` subdirectory functions just like the top level `docs` subdirectory and
-the `qa` subdirectory functions just like the top level `qa` subdirectory. The
-`plugin` subdirectory contains the x-pack module which runs inside the
-Elasticsearch process. The `transport-client` subdirectory contains extensions
-to Elasticsearch's standard transport client to work properly with x-pack.
-
-### Gradle Build
-
-We use Gradle to build Elasticsearch because it is flexible enough to not only
-build and package Elasticsearch, but also orchestrate all of the ways that we
-have to test Elasticsearch.
-
-#### Configurations
-
-Gradle organizes dependencies and build artifacts into "configurations" and
-allows you to use these configurations arbitrarily. Here are some of the most
-common configurations in our build and how we use them:
-
-<dl>
-<dt>`compile`</dt><dd>Code that is on the classpath at both compile and
-runtime.</dd>
-<dt>`runtime`</dt><dd>Code that is not on the classpath at compile time but is
-on the classpath at runtime. We mostly use this configuration to make sure that
-we do not accidentally compile against dependencies of our dependencies also
-known as "transitive" dependencies".</dd>
-<dt>`compileOnly`</dt><dd>Code that is on the classpath at compile time but that
-should not be shipped with the project because it is "provided" by the runtime
-somehow. Elasticsearch plugins use this configuration to include dependencies
-that are bundled with Elasticsearch's server.</dd>
-<dt>`bundle`</dt><dd>Only available in projects with the shadow plugin,
-dependencies with this configuration are bundled into the jar produced by the
-build. Since IDEs do not understand this configuration we rig them to treat
-dependencies in this configuration as `compile` dependencies.</dd>
-<dt>`testCompile`</dt><dd>Code that is on the classpath for compiling tests
-that are part of this project but not production code. The canonical example
-of this is `junit`.</dd>
-</dl>
-
-Contributing as part of a class
--------------------------------
-In general Elasticsearch is happy to accept contributions that were created as
-part of a class but strongly advise against making the contribution as part of
-the class. So if you have code you wrote for a class feel free to submit it.
-
-Please, please, please do not assign contributing to Elasticsearch as part of a
-class. If you really want to assign writing code for Elasticsearch as an
-assignment then the code contributions should be made to your private clone and
-opening PRs against the primary Elasticsearch clone must be optional, fully
-voluntary, not for a grade, and without any deadlines.
-
-Because:
-
-* While the code review process is likely very educational, it can take wildly
-varying amounts of time depending on who is available, where the change is, and
-how deep the change is. There is no way to predict how long it will take unless
-we rush.
-* We do not rush reviews without a very, very good reason. Class deadlines
-aren't a good enough reason for us to rush reviews.
-* We deeply discourage opening a PR you don't intend to work through the entire
-code review process because it wastes our time.
-* We don't have the capacity to absorb an entire class full of new contributors,
-especially when they are unlikely to become long time contributors.
-
-Finally, we require that you run `./gradlew check` before submitting a
-non-documentation contribution. This is mentioned above, but it is worth
-repeating in this section because it has come up in this context.
-
-[eclipse]: https://download.eclipse.org/eclipse/downloads/drops4/R-4.13-201909161045/
-[intellij]: https://blog.jetbrains.com/idea/2017/07/intellij-idea-2017-2-is-here-smart-sleek-and-snappy/
-[shadow-plugin]: https://github.com/johnrengelman/shadow
+As usual, you should never force push to a publicly shared branch, but add incremental commits.

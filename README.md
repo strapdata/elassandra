@@ -5,11 +5,14 @@
 
 ## [http://www.elassandra.io/](http://www.elassandra.io/)
 
-Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serves as an Elasticsearch data and configuration store.
+Elassandra is an [Apache Cassandra](http://cassandra.apache.org) distribution including an [Elasticsearch](https://github.com/elastic/elasticsearch) search engine.
+Elassandra is a multi-master multi-cloud database and search engine with support for replicating across multiple datacenters in active/active mode.
+
+Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serves as an Elasticsearch data and configuration store.
 
 ![Elassandra architecture](/docs/elassandra/source/images/elassandra1.jpg)
 
-Elassandra supports Cassandra vnodes and scales horizontally by adding more nodes.
+Elassandra supports Cassandra vnodes and scales horizontally by adding more nodes without the need to reshard indices.
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
@@ -225,6 +228,6 @@ the License.
 
 ## Acknowledgments
 
-* Elasticsearch and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other countries.
+* Elasticsearch, Logstash, Beats and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other countries.
 * Apache Cassandra, Apache Lucene, Apache, Lucene and Cassandra are trademarks of the Apache Software Foundation.
 * Elassandra is a trademark of Strapdata SAS.
