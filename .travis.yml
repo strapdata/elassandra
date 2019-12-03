@@ -45,6 +45,7 @@ before_install:
 
 install:
   - ./install-jdk.sh -v -e -f 9;
+  - rm -f *.tar.gz
   - ./install-jdk.sh -v -e -f 12;
   - rm -f *.tar.gz
   - export JAVA8_HOME=$JAVA_HOME
