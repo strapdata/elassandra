@@ -183,7 +183,7 @@ final class DefaultSearchContext extends SearchContext {
             shardTarget.getClusterAlias());
         queryShardContext.setTypes(request.types());
         queryBoost = request.indexBoost();
-        this.clusterState = indexService.clusterService().state();
+        this.clusterState = clusterService.state();
     }
 
     @Override

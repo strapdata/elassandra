@@ -53,6 +53,7 @@ import org.elasticsearch.search.query.QueryPhaseExecutionException;
 import org.elasticsearch.search.rescore.RescoreContext;
 import org.elasticsearch.search.slice.SliceBuilder;
 import org.elasticsearch.search.sort.SortAndFormats;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.UUID;
@@ -65,7 +66,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 
-public class DefaultSearchContextTests extends ESTestCase {
+public class DefaultSearchContextTests extends ESSingleNodeTestCase {
 
     public void testPreProcess() throws Exception {
         TimeValue timeout = new TimeValue(randomIntBetween(1, 100));
@@ -116,7 +117,7 @@ public class DefaultSearchContextTests extends ESTestCase {
 
             SearchShardTarget target = new SearchShardTarget("node", shardId, null, OriginalIndices.NONE);
 
-            DefaultSearchContext context1 = new DefaultSearchContext(1L, shardSearchRequest, target, searcher, null, indexService,
+            DefaultSearchContext context1 = new DefaultSearchContext(1L, shardSearchRequest, target, searcher, clusterService(), indexService,
                 indexShard, bigArrays, null, timeout, null, Version.CURRENT);
             context1.from(300);
 
@@ -158,7 +159,7 @@ public class DefaultSearchContextTests extends ESTestCase {
 
             // rescore is null but sliceBuilder is not null
             DefaultSearchContext context2 = new DefaultSearchContext(2L, shardSearchRequest, target, searcher,
-                null, indexService, indexShard, bigArrays, null, timeout, null, Version.CURRENT);
+                clusterService(), indexService, indexShard, bigArrays, null, timeout, null, Version.CURRENT);
 
             SliceBuilder sliceBuilder = mock(SliceBuilder.class);
             int numSlices = maxSlicesPerScroll + randomIntBetween(1, 100);
@@ -174,7 +175,7 @@ public class DefaultSearchContextTests extends ESTestCase {
             when(shardSearchRequest.getAliasFilter()).thenReturn(AliasFilter.EMPTY);
             when(shardSearchRequest.indexBoost()).thenReturn(AbstractQueryBuilder.DEFAULT_BOOST);
 
-            DefaultSearchContext context3 = new DefaultSearchContext(3L, shardSearchRequest, target, searcher, null,
+            DefaultSearchContext context3 = new DefaultSearchContext(3L, shardSearchRequest, target, searcher, clusterService(),
                 indexService, indexShard, bigArrays, null, timeout, null, Version.CURRENT);
             ParsedQuery parsedQuery = ParsedQuery.parsedMatchAllQuery();
             context3.sliceBuilder(null).parsedQuery(parsedQuery).preProcess(false);
