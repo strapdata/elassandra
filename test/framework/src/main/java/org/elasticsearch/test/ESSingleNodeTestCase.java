@@ -67,6 +67,7 @@ import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.MockSearchService;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.test.discovery.MockCassandraDiscovery;
+import org.elasticsearch.test.discovery.TestZenDiscovery;
 import org.elasticsearch.test.store.MockFSIndexStore;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -169,7 +170,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * The default is <tt>true</tt>
      */
     protected boolean addMockTransportService() {
-        return true;
+        return false;
     }
 
     /**
@@ -246,14 +247,14 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     }
 
     private Node newNode() {
-        ArrayList<Class<? extends Plugin>> plugins = new ArrayList<>(getPlugins());
-        plugins.addAll(getMockPlugins());
-        if (addMockTransportService()) {
-            // add both mock plugins - local and tcp if they are not there
-            // we do this in case somebody overrides getMockPlugins and misses to call super
-            if (plugins.contains(getTestTransportPlugin()) == false) {
-                plugins.add(getTestTransportPlugin());
-            }
+        Collection<Class<? extends Plugin>> plugins = getPlugins();
+        if (plugins.contains(getTestTransportPlugin()) == false) {
+            plugins = new ArrayList<>(plugins);
+            plugins.add(getTestTransportPlugin());
+        }
+        if (plugins.contains(MockCassandraDiscovery.TestPlugin.class) == false) {
+            plugins = new ArrayList<>(plugins);
+            plugins.add(MockCassandraDiscovery.TestPlugin.class);
         }
         logger.info("plugins={}", plugins);
         Node node = ElassandraDaemon.instance.newNode(ElassandraDaemon.instance.nodeSettings(nodeSettings()), plugins, forbidPrivateIndexSettings());
@@ -296,12 +297,11 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         logger.info("[{}#{}]: acquiring semaphore ={}", getTestClass().getSimpleName(), getTestName(), testMutex.toString());
         testMutex.acquireUninterruptibly();
         super.setUp();
+        //the seed has to be created regardless of whether it will be used or not, for repeatability
+        long seed = random().nextLong();
         // Create the node lazily, on the first test. This is ok because we do not randomize any settings,
         // only the cluster name. This allows us to have overridden properties for plugins and the version to use.
-
         if (ElassandraDaemon.instance.node() == null) {
-            //the seed has to be created regardless of whether it will be used or not, for repeatability
-            long seed = random().nextLong();
             startNode(seed);
         }
     }
@@ -310,6 +310,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     @Override
     public void tearDown() throws Exception {
         logger.info("[{}#{}]: cleaning up after test", getTestClass().getSimpleName(), getTestName());
+        super.tearDown();
         try {
             DeleteIndexRequestBuilder builder = ElassandraDaemon.instance.node().client().admin().indices().prepareDelete("*");
             assertAcked(builder.get());
@@ -330,7 +331,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             testMutex.release();
             logger.info("[{}#{}]: released semaphore={}", getTestClass().getSimpleName(), getTestName(), testMutex.toString());
         }
-        super.tearDown();
+        if (resetNodeAfterTest()) {
+            assert ElassandraDaemon.instance != null;
+            stopNode();
+            //the seed can be created within this if as it will either be executed before every test method or will never be.
+            startNode(random().nextLong());
+        }
     }
 
     @BeforeClass
@@ -352,12 +358,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * <code>false</code>.
      */
     protected boolean resetNodeAfterTest() {
-        return true;
+        return false;
     }
 
     /** The plugin classes that should be added to the node. */
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.EMPTY_LIST;
+        return Collections.emptyList();
     }
 
     /** Helper method to create list of plugins without specifying generic types. */
