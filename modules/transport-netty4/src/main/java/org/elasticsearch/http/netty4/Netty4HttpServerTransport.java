@@ -255,7 +255,8 @@ public class Netty4HttpServerTransport extends AbstractLifecycleComponent implem
                                      NamedXContentRegistry xContentRegistry, Dispatcher dispatcher) {
         super(settings);
         this.settings = settings;
-        Netty4Utils.setAvailableProcessors(EsExecutors.PROCESSORS_SETTING.get(settings));
+        // done by Cassandra
+        //Netty4Utils.setAvailableProcessors(EsExecutors.PROCESSORS_SETTING.get(settings));
         this.networkService = networkService;
         this.bigArrays = bigArrays;
         this.threadPool = threadPool;
