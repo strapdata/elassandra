@@ -107,7 +107,7 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
     }
 
     ShardSearchLocalRequest(SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
-                            AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
+                            AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias, String[] indexRoutings) {
         this(shardIt.shardId(),
             // set token ranges from original request is not null, or from the shard.
             searchRequest.tokenRanges() != null ? searchRequest.tokenRanges() : (shardIt.getShardRoutings().size() == 0 ? null : shardIt.getShardRoutings().iterator().next().tokenRanges()),
@@ -115,7 +115,7 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
             searchRequest.source(), searchRequest.types(), searchRequest.requestCache(),
             searchRequest.tokenRangesBitsetCache(), searchRequest.extraParams(),
             aliasFilter, indexBoost,
-            searchRequest.allowPartialSearchResults(), null, searchRequest.preference());
+            searchRequest.allowPartialSearchResults(), indexRoutings, searchRequest.preference());
         this.scroll = searchRequest.scroll();
         this.nowInMillis = nowInMillis;
         this.clusterAlias = clusterAlias;

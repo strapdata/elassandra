@@ -68,8 +68,8 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
 
     // for test only
     public ShardSearchTransportRequest(OriginalIndices originalIndices, SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
-                                       AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
-        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardIt, numberOfShards, aliasFilter, indexBoost, nowInMillis, clusterAlias);
+                                       AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias, String[] indexRoutings) {
+        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardIt, numberOfShards, aliasFilter, indexBoost, nowInMillis, clusterAlias, indexRoutings);
         this.originalIndices = originalIndices;
     }
 
