@@ -547,7 +547,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         return new QueryShardContext(
             shardId, indexSettings, indexCache.bitsetFilterCache(), context -> newCachedSearcher(shardId, context),
             indexFieldData::getForField, mapperService(), similarityService(), scriptService, xContentRegistry, namedWriteableRegistry,
-            client, indexReader, nowInMillis, clusterAlias);
+            client, indexReader, nowInMillis, clusterAlias, clusterService);
     }
 
     /**
