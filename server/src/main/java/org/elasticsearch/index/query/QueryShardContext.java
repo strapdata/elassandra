@@ -145,7 +145,7 @@ public class QueryShardContext extends QueryRewriteContext {
         this(source.shardId, source.indexSettings, source.bitsetFilterCache, source.searcherFactory,
             source.indexFieldDataService, source.mapperService, source.similarityService, source.scriptService,
             source.getXContentRegistry(), source.getWriteableRegistry(), source.client, source.reader,
-            source.nowInMillis, source.clusterAlias);
+            source.nowInMillis, source.clusterAlias, source.clusterService);
         this.types = source.getTypes();
     }
 
