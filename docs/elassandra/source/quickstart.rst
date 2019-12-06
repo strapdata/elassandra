@@ -4,9 +4,7 @@ Quick Start
 Start your cluster
 ------------------
 
-Start a docker-based Elassandra cluster using docker-compose:
-
-A sample docker compose is provided in **ci/docker-compose.yml**:
+Start a docker-based Elassandra cluster using docker-compose file **ci/docker-compose.yml**:
 
 .. code::
 
@@ -59,7 +57,6 @@ Start containers and scale up the elassandra cluster :
 
     docker-compose --project-name test -f docker-compose.yml up -d --scale node=0
     docker-compose --project-name test -f docker-compose.yml up -d --scale node=1
-    docker-compose --project-name test -f docker-compose.yml up -d --scale node=2
 
 Check the cassandra nodes status:
 
@@ -78,7 +75,7 @@ Check the cassandra nodes status:
 Import sample data
 ------------------
 
-After about 35 secondes to start Elassandra on node0, you should have access to kibana at http://localhost:5601, and you can insert sample data and browse dashboards.
+After about 35 secondes to start Elassandra on node0, you should have access to kibana at http://localhost:5601, and you can insert sample data and browse sample dashboards.
 
 .. image:: images/kibana-sample-data.png
 
@@ -423,7 +420,7 @@ Stop all containers:
 
 .. code::
 
-    docker-compose -f docker-compose.yml stop
+    docker-compose --project-name test -f docker-compose.yml stop
 
 Docker Troubleshooting
 ----------------------
@@ -460,7 +457,7 @@ If your containers exit, check the OOMKilled and the exit code in your docker co
         }
     ...
 
-If needed, increase your docker memory quota from the docker advanced preferences:
+If needed, increase your docker memory quota from the docker advanced preferences and adjust memory setting in your docker-compose file:
 
 .. image:: images/docker-advanced-prefs.png
    :width: 500px
