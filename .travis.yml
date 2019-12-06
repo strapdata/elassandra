@@ -38,12 +38,9 @@ before_install:
   - wget https://github.com/strapdata/bach/raw/master/install-jdk.sh
   - chmod a+x install-jdk.sh
   # solves gpg server problems
-  - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
-  - wget -O ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
-  - unzip ccm-elassandra.zip
-  - cd ecm-ccm-elassandra
-  - sudo ./setup.py install
-  - cd ..
+  # - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
+  - wget -O ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
+  - unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
 
 #matrix:
 #  include:
@@ -61,11 +58,7 @@ install:
 script:
   - ./gradlew server:test -Dbuild.snapshot=false
   - ./gradlew assemble -Dbuild.snapshot=false
-  # switch to JDK8 to run CCM tests
-  - export JAVA_HOME=$JAVA8_HOME
-  - ./run-ccm-test.sh
-  # switch to JDK9 to publish
-  - export JAVA_HOME=$JAVA9_HOME
+  - JAVA_HOME=$JAVA8_HOME ./integ-test/test-cleanup-repair.sh $(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
