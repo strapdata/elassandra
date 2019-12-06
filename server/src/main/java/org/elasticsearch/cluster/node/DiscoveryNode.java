@@ -114,6 +114,10 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
                 throw new IllegalArgumentException();
             }
         }
+
+        public boolean isAlive() {
+            return this.status == ALIVE.status;
+        }
     }
 
     public DiscoveryNode status(DiscoveryNodeStatus status) {

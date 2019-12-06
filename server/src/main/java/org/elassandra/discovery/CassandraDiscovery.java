@@ -86,25 +86,16 @@ import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.DiscoveryStats;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.ShardNotFoundException;
 import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
@@ -146,13 +137,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final AtomicReference<AckClusterStatePublishResponseHandler> handlerRef = new AtomicReference<>();
     private final Object stateMutex = new Object();
 
-    private final ClusterGroup clusterGroup;
+    private final GossipCluster gossipCluster;
 
     private final InetAddress localAddress;
     private final String localDc;
 
-    private final ConcurrentMap<String, ShardRoutingState> localShardStateMap = new ConcurrentHashMap<String, ShardRoutingState>();
-    private final ConcurrentMap<UUID, Map<String,ShardRoutingState>> remoteShardRoutingStateMap = new ConcurrentHashMap<UUID, Map<String,ShardRoutingState>>();
     private final RoutingTableUpdateTaskExecutor routingTableUpdateTaskExecutor;
     /**
      * When searchEnabled=true, local shards are visible for routing, otherwise, local shards are seen as UNASSIGNED.
@@ -195,10 +184,220 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         this.localAddress = FBUtilities.getBroadcastAddress();
         this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
 
-        this.clusterGroup = new ClusterGroup();
+        this.gossipCluster = new GossipCluster();
         this.pendingStatesQueue = new PendingClusterStatesQueue(logger, MAX_PENDING_CLUSTER_STATES_SETTING.get(settings));
         this.appliedClusterStateAction = new AppliedClusterStateAction(settings, transportService, this, discoverySettings);
         this.routingTableUpdateTaskExecutor = new RoutingTableUpdateTaskExecutor();
+    }
+
+    public class GossipNode {
+        DiscoveryNode discoveryNode;
+        Map<String,ShardRoutingState> shardRoutingStateMap;
+
+        public GossipNode(DiscoveryNode discoveryNode, Map<String,ShardRoutingState> shardRoutingStateMap) {
+            this.discoveryNode = discoveryNode;
+            this.shardRoutingStateMap = shardRoutingStateMap;
+        }
+
+        public GossipNode(DiscoveryNode discoveryNode) {
+            this(discoveryNode, new HashMap<>());
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+
+            GossipNode other = (GossipNode) obj;
+            return Objects.equals(discoveryNode, other.discoveryNode) &&
+                Objects.equals(this.shardRoutingStateMap, other.shardRoutingStateMap);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(discoveryNode, shardRoutingStateMap);
+        }
+    }
+
+    public class GossipCluster {
+        private final ConcurrentMap<UUID, GossipNode> remoteMembers = new ConcurrentHashMap<>();
+
+        public DiscoveryNodes nodes() {
+            DiscoveryNodes.Builder nodesBuilder = new DiscoveryNodes.Builder()
+                .localNodeId(SystemKeyspace.getLocalHostId().toString())
+                .masterNodeId(SystemKeyspace.getLocalHostId().toString())
+                .add(localNode());
+            for (GossipNode node : remoteMembers.values()) {
+                nodesBuilder.add(node.discoveryNode);
+            }
+            return nodesBuilder.build();
+        }
+
+        public DiscoveryNode getDiscoveryNode(UUID id) {
+            return remoteMembers.containsKey(id) ? remoteMembers.get(id).discoveryNode : null;
+        }
+
+        public Map<String,ShardRoutingState> getShardRoutingState(UUID id) {
+            return remoteMembers.containsKey(id) ? remoteMembers.get(id).shardRoutingStateMap : null;
+        }
+
+        public boolean contains(UUID id) {
+            return remoteMembers.containsKey(id);
+        }
+
+        public Collection<GossipNode> remoteMembers() {
+            return remoteMembers.values();
+        }
+
+        public ShardRoutingState getShardRoutingState(UUID nodeUuid, org.elasticsearch.index.Index index) {
+            if (localNode().uuid().equals(nodeUuid)) {
+                if (isSearchEnabled()) {
+                    try {
+                        IndexShard localIndexShard = clusterService.indexServiceSafe(index).getShardOrNull(0);
+                        if (localIndexShard != null && localIndexShard.routingEntry() != null)
+                            return localIndexShard.routingEntry().state();
+
+                        // shardRouting not yet created.
+                        return ShardRoutingState.INITIALIZING;
+                    } catch (IndexNotFoundException e) {
+                    }
+                }
+                return ShardRoutingState.UNASSIGNED;
+            }
+
+            GossipNode gossipNode = remoteMembers.get(nodeUuid);
+            if (gossipNode == null)
+                return ShardRoutingState.UNASSIGNED;
+
+            ShardRoutingState shardRoutingState = gossipNode.shardRoutingStateMap.get(index.getName());
+            return (shardRoutingState == null) ? ShardRoutingState.UNASSIGNED : shardRoutingState;
+        }
+
+        public GossipNode remove(final UUID hostId, final String source) {
+            GossipNode oldGossipNode = remoteMembers.remove(hostId);
+            if (oldGossipNode != null) {
+                clusterService.submitStateUpdateTask(source, new RoutingTableUpdateTask(true),
+                    routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
+            }
+            return oldGossipNode;
+        }
+
+        public GossipNode update(final InetAddress endpoint, EndpointState epState, String source, boolean allowClusterStateUpdate) {
+            if (epState.getApplicationState(ApplicationState.HOST_ID) == null || epState.getApplicationState(ApplicationState.HOST_ID).value == null)
+                return null;
+
+            UUID hostId = UUID.fromString(epState.getApplicationState(ApplicationState.HOST_ID).value);
+            String x1 = epState.getApplicationState(ApplicationState.X1) == null ? null : epState.getApplicationState(ApplicationState.X1).value;
+            return update(hostId, source, endpoint, getInternalIp(epState), getRpcAddress(epState), discoveryNodeStatus(epState), x1,  allowClusterStateUpdate);
+        }
+
+        /**
+         * Trigger routing table update if node status or x1 changed, or a new ALIVE node appear.
+         * Trigger nodes update if node IP or  name changed
+         */
+        private GossipNode update(final UUID hostId,
+                                 final String source,
+                                 final InetAddress endpoint,
+                                 final InetAddress internalIp,
+                                 final InetAddress rpcAddress,
+                                 final DiscoveryNodeStatus status,
+                                 final String x1,
+                                 boolean allowClusterStateUpdate
+        ) {
+            if (localNode().getId().equals(hostId)) {
+                // ignore GOSSIP update related to our self node.
+                logger.debug("Ignoring GOSSIP update for node id={} ip={} because it's mine", hostId, endpoint);
+            } else {
+                logger.debug("updating id={} endpoint={} source=[{}] status=[{}] x1=[{}]", hostId, endpoint, source, status, x1);
+            }
+
+            final TransportAddress addr = new TransportAddress(Boolean.getBoolean("es.use_internal_address") ? internalIp : rpcAddress, publishPort());
+            return remoteMembers.compute(hostId, (k,gn) -> {
+                boolean nodeUpdate = false;
+                boolean routingUpdate = false;
+                Map<String, ShardRoutingState> x1Map = new HashMap<>();
+                Set<String> updatedIndices = Collections.EMPTY_SET;
+
+                if (x1 != null && status.isAlive()) {
+                    try {
+                        x1Map = jsonMapper.readValue(x1, indexShardStateTypeReference);
+                    } catch (IOException e) {
+                        logger.error("Failed to parse X1 for node [{}] x1={}", hostId, x1);
+                    }
+                }
+
+                if (gn == null) {
+                    // new node
+                    Map<String, String> attrs =  new HashMap<>();
+                    attrs.put("dc", localDc);
+                    attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
+                    logger.debug("Add node NEW host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
+                        hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                    gn = new GossipNode(new DiscoveryNode(buildNodeName(endpoint), hostId.toString(), addr, attrs, CASSANDRA_ROLES, Version.CURRENT, status), x1Map);
+                    nodeUpdate = true;
+                    routingUpdate = status.isAlive();
+                } else {
+                    DiscoveryNode dn = gn.discoveryNode;
+
+                    // status changed
+                    if (!dn.getStatus().equals(status)) {
+                        logger.debug("Update node STATUS host_id={} endpoint={} internal_ip={} rpc_address={}, status={}",
+                            hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                        dn.status(status);
+                        nodeUpdate = true;
+                        routingUpdate = true;
+
+                        if (!status.isAlive()) {
+                            // node probably down, notify metaDataVersionAckListener..
+                            notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
+                        }
+                    }
+
+                    // Node name or IP changed
+                    if (!dn.getName().equals(buildNodeName(endpoint)) || !dn.getInetAddress().equals(addr)) {
+                        // update DiscoveryNode IP if endpoint is ALIVE
+                        if (status.equals(DiscoveryNodeStatus.ALIVE)) {
+                            logger.debug("Update node IP host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
+                                hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                            gn = new GossipNode(new DiscoveryNode(buildNodeName(endpoint), hostId.toString(), addr, dn.getAttributes(), CASSANDRA_ROLES, Version.CURRENT, status), gn.shardRoutingStateMap);
+                            nodeUpdate = true;
+                        } else {
+                            logger.debug("Ignoring node DEAD host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
+                                hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                        }
+                    }
+
+                    // X1 changed
+                    if (!gn.shardRoutingStateMap.equals(x1Map)) {
+                        routingUpdate = true;
+                        if (nodeUpdate == false && !x1Map.isEmpty()) {
+                            MapDifference<String, ShardRoutingState> mapDifference = Maps.difference(x1Map, gn.shardRoutingStateMap);
+                            if (!mapDifference.entriesDiffering().isEmpty() || !mapDifference.entriesOnlyOnRight().isEmpty()) {
+                                updatedIndices = mapDifference.entriesDiffering().keySet();
+                                logger.trace("Updating routing table source=[{}] for indices={}", source, updatedIndices);
+                            }
+                        }
+                    }
+                    gn.shardRoutingStateMap = x1Map;
+
+                    if (allowClusterStateUpdate && (nodeUpdate || routingUpdate)) {
+                        logger.debug("Updating routing table node source=[{}] nodeUpdate={} routingUpdate={}", source, nodeUpdate, routingUpdate);
+                        RoutingTableUpdateTask routingTableUpdateTask = (routingUpdate && !nodeUpdate) ?
+                            new RoutingTableUpdateTask(true, updatedIndices) :
+                            new RoutingTableUpdateTask(routingUpdate);
+
+                        clusterService.submitStateUpdateTask(source, routingTableUpdateTask,
+                            routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
+                    }
+                }
+                return gn;
+            });
+        }
     }
 
     public PendingClusterStatesQueue pendingStatesQueue() {
@@ -217,9 +416,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     protected void doStart()  {
         Gossiper.instance.register(this);
-        synchronized (clusterGroup) {
+        synchronized (gossipCluster) {
             logger.debug("Connected to cluster [{}]", clusterName.value());
-            clusterGroup.put(localNode().getId(), localNode());
             logger.info("localNode name={} id={} localAddress={} publish_host={}", localNode().getName(), localNode().getId(), localAddress, localNode().getAddress());
 
             // initialize cluster from cassandra local token map
@@ -230,14 +428,32 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     if (!rs.isEmpty()) {
                         UntypedResultSet.Row row = rs.one();
                         EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
-                        clusterGroup.update(epState, hostId, endpoint,
-                                row.has("preferred_ip") ? row.getInetAddress("preferred_ip") : endpoint,
-                                row.has("rpc_address") ? row.getInetAddress("rpc_address") : null);
+                        gossipCluster.update(endpoint, epState, "discovery-init", false);
+                    }
+                }
+            }
+
+            // walk the gossip states
+            for (Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates()) {
+                EndpointState epState = entry.getValue();
+                InetAddress   endpoint = entry.getKey();
+
+                if (!epState.getStatus().equals(VersionedValue.STATUS_NORMAL) && !epState.getStatus().equals(VersionedValue.SHUTDOWN)) {
+                    logger.info("Ignoring node state={}", epState);
+                    continue;
+                }
+
+                if (isLocal(endpoint)) {
+                    VersionedValue vv = epState.getApplicationState(ApplicationState.HOST_ID);
+                    if (vv != null) {
+                        String hostId = vv.value;
+                        if (!this.localNode().getId().equals(hostId)) {
+                            gossipCluster.update(endpoint, epState, "discovery-init-gossip", false);
+                        }
                     }
                 }
             }
         }
-        updateClusterGroupsFromGossiper();
 
         // Cassandra is usually in the NORMAL state when discovery start.
         if (isNormal(Gossiper.instance.getEndpointStateForEndpoint(this.localAddress)) && isAutoEnableSearch()) {
@@ -248,7 +464,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             }
         }
 
-        updateNodesTable("starting-cassandra-discovery");
+        clusterService.submitStateUpdateTask("starting-cassandra-discovery", new RoutingTableUpdateTask(true),
+            routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
     }
 
     public ClusterState initClusterState(DiscoveryNode localNode) {
@@ -266,59 +483,25 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         return clusterState;
     }
 
-    /**
-     * Update the shardState map and trigger a cluster state routing table update if changed.
-     */
-    private void updateShardRouting(final UUID remoteNode, final Map<String, ShardRoutingState> shardsStateMap, String source, final ClusterState currentState, final boolean updateNodes) {
-        this.remoteShardRoutingStateMap.compute(remoteNode, (k, v) -> {
-            if (v == null)
-                return shardsStateMap;
-            MapDifference<String, ShardRoutingState> mapDifference = Maps.difference(v, shardsStateMap);
-            if (!mapDifference.entriesDiffering().isEmpty() || !mapDifference.entriesOnlyOnRight().isEmpty()) {
-                Set<Index> indices = Stream.concat(mapDifference.entriesDiffering().keySet().stream(), mapDifference.entriesOnlyOnRight().keySet().stream())
-                        .map(i -> Optional.ofNullable(currentState.metaData().hasIndex(i) ? currentState.metaData().index(i).getIndex() : null))
-                        .filter(Optional::isPresent)
-                        .map(Optional::get)
-                        .collect(Collectors.toSet());
-                logger.trace("Update routing table for indices={}", indices);
-                if (!indices.isEmpty())
-                    updateRoutingTable(source, indices, updateNodes);
-            }
-            return shardsStateMap;
-        });
-    }
-
-    private void updateRoutingTable(String source, Set<Index> indices, boolean nodesUpdates) {
-        logger.debug("Updating routing table indices source=[{}] indices={} nodesUpdates={}", source, indices, nodesUpdates);
-        clusterService.submitStateUpdateTask(source, new RoutingTableUpdateTask(indices, nodesUpdates),
-                this.routingTableUpdateTaskExecutor, this.routingTableUpdateTaskExecutor, this.routingTableUpdateTaskExecutor);
-    }
-
-    private void updateNodesTable(String source) {
-        logger.debug("Updating routing table node source=[{}]", source);
-        clusterService.submitStateUpdateTask(source, new RoutingTableUpdateTask(true),
-                this.routingTableUpdateTaskExecutor, this.routingTableUpdateTaskExecutor, this.routingTableUpdateTaskExecutor);
-    }
-
     class RoutingTableUpdateTask  {
-        final Set<Index> indices;
-        final boolean updateNodes;
+        final Set<String> indices;   // update routing for these indices
+        final boolean updateRouting;// update routinTable (X1 or status change)
 
-        RoutingTableUpdateTask(Index index) {
-            this(Collections.singleton(index), false);
+        RoutingTableUpdateTask(String index) {
+            this(true, Collections.singleton(index));
         }
 
-        RoutingTableUpdateTask(boolean updateNodes) {
-            this(Collections.EMPTY_SET, updateNodes);
+        RoutingTableUpdateTask(boolean updateRouting) {
+            this(updateRouting, Collections.EMPTY_SET);
         }
 
-        RoutingTableUpdateTask(Set<Index> indices, boolean updateNodes) {
+        RoutingTableUpdateTask(boolean updateRouting, Set<String> indices) {
             this.indices = indices;
-            this.updateNodes = updateNodes;
+            this.updateRouting = updateRouting;
         }
 
-        public Set<Index> indices()  { return this.indices; }
-        public boolean updateNodes() { return this.updateNodes; }
+        public Set<String> indices()  { return this.indices; }
+        public boolean updateRouting() { return this.updateRouting; }
     }
 
     /**
@@ -328,14 +511,19 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         @Override
         public ClusterTasksResult<RoutingTableUpdateTask> execute(ClusterState currentState, List<RoutingTableUpdateTask> tasks) throws Exception {
-            boolean updateNodes = tasks.stream().filter(RoutingTableUpdateTask::updateNodes).count() > 0;
-            Set<Index> indices = tasks.stream().map(RoutingTableUpdateTask::indices).flatMap(Set::stream).collect(Collectors.toSet());
+            boolean updateRouting = tasks.stream().filter(RoutingTableUpdateTask::updateRouting).count() > 0;
+            Set<Index> indices = tasks.stream().map(RoutingTableUpdateTask::indices)
+                .flatMap(Set::stream)
+                .map(i -> Optional.ofNullable(currentState.metaData().hasIndex(i) ? currentState.metaData().index(i).getIndex() : null))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toSet());
 
             DiscoveryNodes discoverNodes = nodes();
             ClusterState.Builder clusterStateBuilder = ClusterState.builder(currentState);
             clusterStateBuilder.nodes(discoverNodes);
 
-            if (currentState.nodes().getSize() != discoverNodes.getSize() || updateNodes) {
+            if (currentState.nodes().getSize() != discoverNodes.getSize() || updateRouting) {
 
                 // update numberOfShards/numberOfReplicas for all indices.
                 MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
@@ -378,47 +566,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
 
-    /**
-     * Update cluster group members from cassandra topology (should only be triggered by IEndpointStateChangeSubscriber events).
-     * This should trigger re-sharding of index for new nodes (when token distribution change).
-     */
-    private void updateClusterGroupsFromGossiper() {
-        for (Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates()) {
-            EndpointState epState = entry.getValue();
-            InetAddress   endpoint = entry.getKey();
-
-            if (!epState.getStatus().equals(VersionedValue.STATUS_NORMAL) && !epState.getStatus().equals(VersionedValue.SHUTDOWN)) {
-                logger.info("Ignoring node state={}", epState);
-                continue;
-            }
-
-            if (isLocal(endpoint)) {
-                VersionedValue vv = epState.getApplicationState(ApplicationState.HOST_ID);
-                if (vv != null) {
-                    String hostId = vv.value;
-                    boolean updateNodes = false;
-                    if (!this.localNode().getId().equals(hostId)) {
-                        updateNodes = clusterGroup.update(epState, hostId, endpoint, getInternalIp(epState), getRpcAddress(epState));
-                    }
-
-                    // initialize the remoteShardRoutingStateMap from gossip states
-                    if (epState.getApplicationState(ApplicationState.X1) != null) {
-                        VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
-                        if (!this.localNode().getId().equals(hostId)) {
-                            try {
-                                Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
-                                updateShardRouting(Gossiper.instance.getHostId(endpoint), shardsStateMap, "X1-"+endpoint, clusterState(), updateNodes);
-                            } catch (IOException e) {
-                                logger.error("Failed to parse X1 for node [{}]", hostId);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        updateNodesTable("discovery-refresh");
-    }
-
     private long getMetadataVersion(VersionedValue versionValue) {
         int i = versionValue.value.indexOf('/');
         if (i > 0) {
@@ -444,6 +591,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
 
+    /*
     public boolean updateNode(InetAddress endpoint, EndpointState epState) {
         if (isLocal(endpoint)) {
             UUID hostUuid = (epState.getApplicationState(ApplicationState.HOST_ID) == null) ?
@@ -459,15 +607,20 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
                 if (x1 != null) {
                     try {
-                        Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
-                        this.remoteShardRoutingStateMap.put(hostUuid, shardsStateMap);
+                        Map<String, ShardRoutingState> newShardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                        Map<String, ShardRoutingState> oldShardsStateMap = this.remoteShardRoutingStateMap.put(hostUuid, newShardsStateMap);
+                        if (!newShardsStateMap.equals(oldShardsStateMap)) {
+                            updatedNode = true; // force update if X1 changed
+                        }
                     } catch (IOException e) {
                         logger.error("Failed to parse X1 for node=[{}]", hostUuid);
                     }
                 }
                 break;
             default:
-                this.remoteShardRoutingStateMap.remove(hostUuid);
+                if (this.remoteShardRoutingStateMap.remove(hostUuid) != null) {
+                    updatedNode = true; // force update if X1 changed
+                }
             }
 
             if (updatedNode) {
@@ -477,6 +630,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
         return false;
     }
+*/
 
     private boolean isLocal(InetAddress endpoint) {
         return DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc);
@@ -522,45 +676,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue versionValue) {
         EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
-        if (isMember(endpoint)) {
+        String hostId = epState.getApplicationState(ApplicationState.HOST_ID).value;
+        if (hostId != null && isMember(endpoint)) {
             if (logger.isTraceEnabled())
                 logger.trace("Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
 
-            switch (state) {
-            case STATUS:
-                if (isNormal(epState)) {
-                    updateNode(endpoint, epState);
-                } else {
-                    // node probably down, notify metaDataVersionAckListener..
-                    notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
-                }
-                break;
-
-            case X1:
-                try {
-                    String hostId = epState.getApplicationState(ApplicationState.HOST_ID).value;
-                    boolean updateNodes = clusterGroup.update(epState, hostId, endpoint, getInternalIp(epState), getRpcAddress(epState));
-                    // update the remoteShardRoutingStateMap to build ES routing table for joined-normal nodes only.
-                    if (clusterGroup.contains(epState.getApplicationState(ApplicationState.HOST_ID).value)) {
-                        if (logger.isTraceEnabled())
-                            logger.trace("Endpoint={} X1={} => updating routing table", endpoint, versionValue);
-
-                        final Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(versionValue.value, indexShardStateTypeReference);
-                        final UUID remoteNode = Gossiper.instance.getHostId(endpoint);
-                        updateShardRouting(remoteNode, shardsStateMap, "X1-" + endpoint, clusterState(), updateNodes);
-                    }
-                } catch (Exception e) {
-                    logger.warn("Failed to parse gossip index shard state", e);
-                }
-                break;
-
-            case X2:
-            case INTERNAL_IP: // manage address replacement from a remote node
-            case RPC_ADDRESS:
-                updateNode(endpoint, epState);
-                break;
-
-            }
+            gossipCluster.update(endpoint, epState, "onChange-" + endpoint, true);
         }
 
         // self status update.
@@ -618,8 +739,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         if (isMember(endpoint)) {
             traceEpState(endpoint, epState);
             logger.debug("Endpoint={} isAlive={} => update node + connecting", endpoint, epState.isAlive());
-            if (isNormal(epState))
-                updateNode(endpoint, epState);
+            gossipCluster.update(endpoint, epState, "onAlive-" + endpoint, true);
         }
     }
 
@@ -628,8 +748,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         if (isMember(endpoint)) {
             traceEpState(endpoint, epState);
             logger.warn("Endpoint={} isAlive={} => update node + disconnecting", endpoint, epState.isAlive());
-            notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
-            updateNode(endpoint, epState);
+            gossipCluster.update(endpoint, epState, "onDead-" + endpoint, true);
         }
     }
 
@@ -637,8 +756,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onRestart(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
             traceEpState(endpoint, epState);
-            if (isNormal(epState))
-                updateNode(endpoint, epState);
+            gossipCluster.update(endpoint, epState, "onAlive-" + endpoint, true);
         }
     }
 
@@ -646,8 +764,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onJoin(InetAddress endpoint, EndpointState epState) {
         if (isLocal(endpoint)) {
             traceEpState(endpoint, epState);
-            if (isNormal(epState))
-                updateNode(endpoint, epState);
+            gossipCluster.update(endpoint, epState, "onAlive-" + endpoint, true);
         }
     }
 
@@ -663,8 +780,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             if (removedNode != null  && !this.localNode().getId().equals(removedNode.getId())) {
                 logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
                 notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
-                this.clusterGroup.remove(removedNode.getId());
-                updateNodesTable("node-removed-"+endpoint);
+                gossipCluster.remove(removedNode.uuid(), "onRemove-"+endpoint.getHostAddress());
             }
         }
     }
@@ -699,8 +815,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     protected void doStop() throws ElasticsearchException {
         Gossiper.instance.unregister(this);
 
-        synchronized (clusterGroup) {
-            clusterGroup.members.clear();
+        synchronized (gossipCluster) {
+            gossipCluster.remoteMembers.clear();
         }
     }
 
@@ -710,22 +826,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private static final TypeReference<Map<String, ShardRoutingState>> indexShardStateTypeReference = new TypeReference<Map<String, ShardRoutingState>>() {};
 
     public Map<String,ShardRoutingState> getShardRoutingState(UUID nodeUuid) {
-        return remoteShardRoutingStateMap.get(nodeUuid);
-    }
-
-    public void publishShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-        final ShardRoutingState prevShardRoutingState;
-        if (shardRoutingState == null) {
-            prevShardRoutingState = localShardStateMap.remove(index);
-        } else {
-            prevShardRoutingState = localShardStateMap.put(index, shardRoutingState);
-        }
-        if (shardRoutingState != prevShardRoutingState)
-            publishX1();
-    }
-
-    public ShardRoutingState getShardRoutingState(final String index) {
-        return this.localShardStateMap.get(index);
+        return gossipCluster.getShardRoutingState(nodeUuid);
     }
 
     public boolean isSearchEnabled() {
@@ -752,7 +853,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         if (searchEnabled.getAndSet(ready) != ready || forcePublishX1) {
             logger.info("searchEnabled set to [{}]", ready);
             publishX1(forcePublishX1);
-            updateRoutingTable("searchEnabled changed to "+ready, Collections.EMPTY_SET, false);
+            clusterService.submitStateUpdateTask("searchEnabled-changed-to-"+ready, new RoutingTableUpdateTask(true),
+                routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
         }
     }
 
@@ -764,6 +866,19 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private void publishX1(boolean force) throws JsonGenerationException, JsonMappingException, IOException {
         if (Gossiper.instance.isEnabled() || force) {
             if (searchEnabled.get()) {
+                Map<String, ShardRoutingState> localShardStateMap = new HashMap<>();
+                if (clusterService.getIndicesService() != null) {
+                    for(IndexService indexService : clusterService.getIndicesService()) {
+                        try {
+                            IndexShard localIndexShard = indexService.getShardOrNull(0);
+                            localShardStateMap.put(indexService.index().getName(),
+                                (localIndexShard != null && localIndexShard.routingEntry() != null) ?
+                                    localIndexShard.routingEntry().state() :
+                                    ShardRoutingState.INITIALIZING);
+                        } catch (ShardNotFoundException | IndexNotFoundException e) {
+                        }
+                    }
+                }
                 String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(localShardStateMap);
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
             } else {
@@ -817,7 +932,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
 
     public DiscoveryNodes nodes() {
-        return this.clusterGroup.nodes();
+        return this.gossipCluster.nodes();
     }
 
     public DiscoveryNodeStatus discoveryNodeStatus(final EndpointState epState) {
@@ -831,90 +946,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             return DiscoveryNodeStatus.ALIVE;
         }
         return DiscoveryNodeStatus.DEAD;
-    }
-
-    private class ClusterGroup {
-
-        protected ConcurrentMap<String, DiscoveryNode> members = new ConcurrentHashMap();
-
-        Map<String, DiscoveryNode> members() {
-            return members;
-        }
-
-        public DiscoveryNode put(String id, DiscoveryNode node) {
-            return members.put(id, node);
-        }
-
-        /**
-         * Put or update discovery node if needed
-         */
-        public boolean update(final EndpointState epState, final String hostId, final InetAddress endpoint, final InetAddress internalIp, final InetAddress rpcAddress) {
-            if (localNode().getId().equals(hostId)) {
-                // ignore GOSSIP update related to our self node.
-                logger.debug("Ignoring GOSSIP update for node id={} ip={} because it's mine", hostId, endpoint);
-            }
-
-            final DiscoveryNodeStatus status = discoveryNodeStatus(epState);
-            final TransportAddress addr = new TransportAddress(Boolean.getBoolean("es.use_internal_address") ? internalIp : rpcAddress, publishPort());
-            DiscoveryNode dn1 = clusterGroup.members.get(hostId);
-            DiscoveryNode dn2 = clusterGroup.members.compute(hostId, (k,dn) -> {
-                if (dn == null) {
-                    Map<String, String> attrs =  new HashMap<>();
-                    attrs.put("dc", localDc);
-                    attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
-                    logger.debug("Add node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                            hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
-                    return new DiscoveryNode(buildNodeName(endpoint), hostId, addr, attrs, CASSANDRA_ROLES, Version.CURRENT, status);
-                } else {
-                    if (!dn.getName().equals(buildNodeName(endpoint)) || !dn.getInetAddress().equals(Boolean.getBoolean("es.use_internal_address") ? internalIp : rpcAddress)) {
-                        // update DiscoveryNode IP if endpoint is ALIVE
-                        if (status.equals(DiscoveryNodeStatus.ALIVE)) {
-                            logger.debug("Update node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                                    hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
-                            return new DiscoveryNode(buildNodeName(endpoint), hostId, addr, dn.getAttributes(), CASSANDRA_ROLES, Version.CURRENT, status);
-                        } else {
-                            logger.debug("Ignoring node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                                    hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
-                            return dn;
-                        }
-                    } 
-                    if (!dn.getStatus().equals(status)) {
-                        // update DiscoverNode status
-                        logger.debug("Update node host_id={} endpoint={} internal_ip={} rpc_address={}, status={}",
-                                hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
-                        return new DiscoveryNode(buildNodeName(endpoint),hostId, addr, dn.getAttributes(), CASSANDRA_ROLES, Version.CURRENT, status);
-                    }
-                    return dn;
-                }
-            });
-            return dn1 != dn2;  
-        }
-
-        public DiscoveryNode remove(String id) {
-            remoteShardRoutingStateMap.remove(id);
-            return members.remove(id);
-        }
-
-        public DiscoveryNode get(String id) {
-            return members.get(id);
-        }
-
-        public boolean contains(String id) {
-            return members.containsKey(id);
-        }
-
-        public Collection<DiscoveryNode> values() {
-            return members.values();
-        }
-
-        public DiscoveryNodes nodes() {
-            DiscoveryNodes.Builder nodesBuilder = new DiscoveryNodes.Builder();
-            nodesBuilder.localNodeId(SystemKeyspace.getLocalHostId().toString()).masterNodeId(SystemKeyspace.getLocalHostId().toString());
-            for (DiscoveryNode node : members.values()) {
-                nodesBuilder.add(node);
-            }
-            return nodesBuilder.build();
-        }
     }
 
     @Override
