@@ -874,7 +874,7 @@ public class QueryManager extends AbstractComponent {
         }
 
         assert request.versionType().validateVersionForWrites(request.version());
-        return new Engine.IndexResult(1L, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
+        return new Engine.IndexResult(1L, 1L, 1L, true);
     }
 
     /**

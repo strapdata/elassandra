@@ -135,42 +135,42 @@ public class UpdateHelper {
      * {@code IndexRequest} to be executed on the primary and replicas.
      */
     Result prepareUpsert(ShardId shardId, UpdateRequest request, final GetResult getResult, LongSupplier nowInMillis) {
-        if (request.upsertRequest() == null && !request.docAsUpsert()) {
-            throw new DocumentMissingException(shardId, request.type(), request.id());
-        }
-        IndexRequest indexRequest = request.docAsUpsert() ? request.doc() : request.upsertRequest();
-        if (request.scriptedUpsert() && request.script() != null) {
-            // Run the script to perform the create logic
-            IndexRequest upsert = request.upsertRequest();
-            Tuple<UpdateOpType, Map<String, Object>> upsertResult = executeScriptedUpsert(upsert, request.script, nowInMillis);
-            switch (upsertResult.v1()) {
-                case CREATE:
-                    // Update the index request with the new "_source"
-                    indexRequest.source(upsertResult.v2());
-                    break;
-                case NONE:
-                    UpdateResponse update = new UpdateResponse(shardId, getResult.getType(), getResult.getId(),
-                        getResult.getVersion(), DocWriteResponse.Result.NOOP);
-                    update.setGetResult(getResult);
-                    return new Result(update, DocWriteResponse.Result.NOOP, upsertResult.v2(), XContentType.JSON);
-                default:
-                    // It's fine to throw an exception here, the leniency is handled/logged by `executeScriptedUpsert`
-                    throw new IllegalArgumentException("unknown upsert operation, got: " + upsertResult.v1());
+            if (request.upsertRequest() == null && !request.docAsUpsert()) {
+                throw new DocumentMissingException(shardId, request.type(), request.id());
             }
-        }
+            IndexRequest indexRequest = request.docAsUpsert() ? request.doc() : request.upsertRequest();
+            if (request.scriptedUpsert() && request.script() != null) {
+                // Run the script to perform the create logic
+                IndexRequest upsert = request.upsertRequest();
+                Tuple<UpdateOpType, Map<String, Object>> upsertResult = executeScriptedUpsert(upsert, request.script, nowInMillis);
+                switch (upsertResult.v1()) {
+                    case CREATE:
+                        // Update the index request with the new "_source"
+                        indexRequest.source(upsertResult.v2());
+                        break;
+                    case NONE:
+                        UpdateResponse update = new UpdateResponse(shardId, getResult.getType(), getResult.getId(),
+                                getResult.getVersion(), DocWriteResponse.Result.NOOP);
+                        update.setGetResult(getResult);
+                        return new Result(update, DocWriteResponse.Result.NOOP, upsertResult.v2(), XContentType.JSON);
+                    default:
+                        // It's fine to throw an exception here, the leniency is handled/logged by `executeScriptedUpsert`
+                        throw new IllegalArgumentException("unknown upsert operation, got: " + upsertResult.v1());
+                }
+            }
 
-        indexRequest.index(request.index())
-            .type(request.type()).id(request.id()).setRefreshPolicy(request.getRefreshPolicy()).routing(request.routing())
-            .parent(request.parent()).timeout(request.timeout()).waitForActiveShards(request.waitForActiveShards())
-            // it has to be a "create!"
-            .create(true);
+            indexRequest.index(request.index())
+                    .type(request.type()).id(request.id()).setRefreshPolicy(request.getRefreshPolicy()).routing(request.routing())
+                    .parent(request.parent()).timeout(request.timeout()).waitForActiveShards(request.waitForActiveShards())
+                    // it has to be a "create!"
+                    .create(true);
 
-        if (request.versionType() != VersionType.INTERNAL) {
-            // in all but the internal versioning mode, we want to create the new document using the given version.
-            indexRequest.version(request.version()).versionType(request.versionType());
-        }
+            if (request.versionType() != VersionType.INTERNAL) {
+                // in all but the internal versioning mode, we want to create the new document using the given version.
+                indexRequest.version(request.version()).versionType(request.versionType());
+            }
 
-        return new Result(indexRequest, DocWriteResponse.Result.CREATED, null, null);
+            return new Result(indexRequest, DocWriteResponse.Result.CREATED, null, null);
     }
 
     /**
@@ -233,16 +233,16 @@ public class UpdateHelper {
         // where users repopulating multi-fields or adding synonyms, etc.
         if (detectNoop && noop) {
             UpdateResponse update = new UpdateResponse(shardId, getResult.getType(), getResult.getId(),
-                getResult.getVersion(), DocWriteResponse.Result.NOOP);
+                    getResult.getVersion(), DocWriteResponse.Result.NOOP);
             update.setGetResult(extractGetResult(request, request.index(), getResult.getSeqNo(), getResult.getPrimaryTerm(),
                 getResult.getVersion(), updatedSourceAsMap, updateSourceContentType, getResult.internalSourceRef()));
             return new Result(update, DocWriteResponse.Result.NOOP, updatedSourceAsMap, updateSourceContentType);
         } else {
             final IndexRequest finalIndexRequest = Requests.indexRequest(request.index())
-                .type(request.type()).id(request.id()).routing(routing).parent(parent)
-                .source(updatedSourceAsMap, updateSourceContentType)
-                .waitForActiveShards(request.waitForActiveShards()).timeout(request.timeout())
-                .setRefreshPolicy(request.getRefreshPolicy());
+                    .type(request.type()).id(request.id()).routing(routing).parent(parent)
+                    .source(updatedSourceAsMap, updateSourceContentType)
+                    .waitForActiveShards(request.waitForActiveShards()).timeout(request.timeout())
+                    .setRefreshPolicy(request.getRefreshPolicy());
             if (false) {
                 finalIndexRequest.setIfSeqNo(getResult.getSeqNo()).setIfPrimaryTerm(getResult.getPrimaryTerm());
             } else {
@@ -286,10 +286,10 @@ public class UpdateHelper {
         switch (operation) {
             case INDEX:
                 final IndexRequest indexRequest = Requests.indexRequest(request.index())
-                    .type(request.type()).id(request.id()).routing(routing).parent(parent)
-                    .source(updatedSourceAsMap, updateSourceContentType)
-                    .waitForActiveShards(request.waitForActiveShards()).timeout(request.timeout())
-                    .setRefreshPolicy(request.getRefreshPolicy());
+                        .type(request.type()).id(request.id()).routing(routing).parent(parent)
+                        .source(updatedSourceAsMap, updateSourceContentType)
+                        .waitForActiveShards(request.waitForActiveShards()).timeout(request.timeout())
+                        .setRefreshPolicy(request.getRefreshPolicy());
                 if (false) {
                     indexRequest.setIfSeqNo(getResult.getSeqNo()).setIfPrimaryTerm(getResult.getPrimaryTerm());
                 } else {
@@ -298,9 +298,9 @@ public class UpdateHelper {
                 return new Result(indexRequest, DocWriteResponse.Result.UPDATED, updatedSourceAsMap, updateSourceContentType);
             case DELETE:
                 DeleteRequest deleteRequest = Requests.deleteRequest(request.index())
-                    .type(request.type()).id(request.id()).routing(routing).parent(parent)
-                    .waitForActiveShards(request.waitForActiveShards())
-                    .timeout(request.timeout()).setRefreshPolicy(request.getRefreshPolicy());
+                        .type(request.type()).id(request.id()).routing(routing).parent(parent)
+                        .waitForActiveShards(request.waitForActiveShards())
+                        .timeout(request.timeout()).setRefreshPolicy(request.getRefreshPolicy());
                 if (false) {
                     deleteRequest.setIfSeqNo(getResult.getSeqNo()).setIfPrimaryTerm(getResult.getPrimaryTerm());
                 } else {
@@ -310,7 +310,7 @@ public class UpdateHelper {
             default:
                 // If it was neither an INDEX or DELETE operation, treat it as a noop
                 UpdateResponse update = new UpdateResponse(shardId, getResult.getType(), getResult.getId(),
-                    getResult.getVersion(), DocWriteResponse.Result.NOOP);
+                        getResult.getVersion(), DocWriteResponse.Result.NOOP);
                 update.setGetResult(extractGetResult(request, request.index(), getResult.getSeqNo(), getResult.getPrimaryTerm(),
                     getResult.getVersion(), updatedSourceAsMap, updateSourceContentType, getResult.internalSourceRef()));
                 return new Result(update, DocWriteResponse.Result.NOOP, updatedSourceAsMap, updateSourceContentType);

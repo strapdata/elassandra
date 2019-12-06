@@ -32,7 +32,10 @@ import org.apache.lucene.search.join.ScoreMode;
 import org.elassandra.cluster.Serializer;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
+import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.update.UpdateResponse;
+import org.elasticsearch.client.Response;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
 import org.elasticsearch.common.settings.Settings;
@@ -1120,6 +1123,27 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.mail.to", "bob@foo.com")).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
         assertThat(((Map<String, Object>)((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("mail")).get("to"), equalTo("bob@foo.com"));
+    }
+
+    @Test
+    public void testSeqnoPresent() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+
+        IndexResponse index = client().prepareIndex("test", "my_type", "1")
+            .setSource("{\"foo\": \"bar\" }", XContentType.JSON)
+            .get();
+        assertThat(index.getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(index.getSeqNo(), equalTo(1L));
+        assertThat(index.getPrimaryTerm(), equalTo(1L));
+
+        UpdateResponse update = client().prepareUpdate("test", "my_type", "1")
+            .setDoc("{\"foo\": \"bar2\" }", XContentType.JSON)
+            .get();
+
+        assertThat(update.getResult(), equalTo(DocWriteResponse.Result.UPDATED));
+        assertThat(update.getSeqNo(), equalTo(1L));
+        assertThat(update.getPrimaryTerm(), equalTo(1L));
     }
 }
 

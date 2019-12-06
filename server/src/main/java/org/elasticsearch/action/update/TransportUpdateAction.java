@@ -20,10 +20,7 @@
 package org.elasticsearch.action.update;
 
 import org.elasticsearch.ResourceAlreadyExistsException;
-import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.ActionRunnable;
-import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.RoutingMissingException;
+import org.elasticsearch.action.*;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
@@ -211,7 +208,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                         ActionListener.<IndexResponse>wrap(response -> {
                             UpdateResponse update = new UpdateResponse(response.getShardInfo(), response.getShardId(),
                                 response.getType(), response.getId(), response.getSeqNo(), response.getPrimaryTerm(),
-                                response.getVersion(), response.getResult());
+                                response.getVersion(), DocWriteResponse.Result.UPDATED);
                             update.setGetResult(UpdateHelper.extractGetResult(request, request.concreteIndex(),
                                 response.getSeqNo(), response.getPrimaryTerm(), response.getVersion(), result.updatedSourceAsMap(),
                                 result.updateSourceContentType(), indexSourceBytes));
