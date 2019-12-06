@@ -1,26 +1,107 @@
 Quick Start
 ===========
 
-Start a single node docker-based Elassandra cluster:
+Start your cluster
+------------------
+
+Start a docker-based Elassandra cluster using docker-compose:
+
+A sample docker compose is provided in **ci/docker-compose.yml**:
 
 .. code::
 
-   docker pull docker.io/strapdata/elassandra:latest
-   docker run --name some-elassandra --rm -p 9042:9042 -p 9200:9200 -e JVM_OPTS="-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler" -dti docker.io/strapdata/elassandra:latest
+    version: '2.4'
+    services:
+      seed_node:
+        image: "docker.io/strapdata/elassandra-dev:6.8.4.0"
+        environment:
+          - "JVM_OPTS=-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
+          - "MAX_HEAP_SIZE=1200m"
+          - "HEAP_NEWSIZE=300m"
+          - "CASSANDRA_CGROUP_MEMORY_LIMIT=true"
+          - "DEBUG=true"
+        cap_add:
+          - IPC_LOCK
+        ulimits:
+          memlock: -1
+        mem_limit: 2000m
+        ports:
+          - "9042:9042"
+          - "9200:9200"
+      node:
+        image: "docker.io/strapdata/elassandra-dev:6.8.4.0"
+        environment:
+          - "JVM_OPTS=-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
+          - "MAX_HEAP_SIZE=1200m"
+          - "HEAP_NEWSIZE=300m"
+          - "CASSANDRA_CGROUP_MEMORY_LIMIT=true"
+          - "CASSANDRA_SEEDS=seed_node"
+          - "DEBUG=true"
+        links:
+          - seed_node
+        cap_add:
+          - IPC_LOCK
+        ulimits:
+          memlock: -1
+        mem_limit: 2000m
 
+      kibana:
+        image: docker.elastic.co/kibana/kibana-oss:6.8.4
+        environment:
+          - "ELASTICSEARCH_URL=http://seed_node:9200"
+        ports:
+          - "5601:5601"
+        mem_limit: 500m
 
-Check the cassandra cluster status:
+Start containers and scale up the elassandra cluster :
 
 .. code::
-   
-   docker exec -i some-elassandra nodetool status
-   Datacenter: DC1
-   ===============
-   Status=Up/Down
-   |/ State=Normal/Leaving/Joining/Moving
-   --  Address     Load       Tokens       Owns (effective)  Host ID                               Rack
-   UN  172.17.0.2  187.36 KiB  8            100.0%            25457162-c5ef-44fa-a46b-a96434aae319  r1
 
+    docker-compose --project-name test -f docker-compose.yml up -d --scale node=0
+    docker-compose --project-name test -f docker-compose.yml up -d --scale node=1
+    docker-compose --project-name test -f docker-compose.yml up -d --scale node=2
+
+Check the cassandra nodes status:
+
+.. code::
+
+   	docker exec -i test_seed_node_1 nodetool status
+   	Datacenter: DC1
+	===============
+	Status=Up/Down
+	|/ State=Normal/Leaving/Joining/Moving
+	--  Address     Load       Tokens       Owns (effective)  Host ID                               Rack
+	UN  172.19.0.3  8.02 MiB   8            61.1%             14ac0af0-e51a-4f98-b57d-7b012b584d84  r1
+	UN  172.19.0.4  3.21 MiB   8            38.9%             fec10e1f-4191-41d5-9a58-7abcccc5972f  r1
+
+
+Import sample data
+------------------
+
+After about 35 secondes to start Elassandra on node0, you should have access to kibana at http://localhost:5601, and you can insert sample data and browse dashboards.
+
+.. image:: images/kibana-sample-data.png
+
+.. image:: images/kibana-sample-dashboard.png
+
+View the kibana sample data in Cassandra:
+
+.. code::
+
+    docker exec -it test_seed_node_1 cqlsh
+
+    Connected to Test Cluster at 127.0.0.1:9042.
+    [cqlsh 5.0.1 | Cassandra 3.11.5 | CQL spec 3.4.4 | Native protocol v4]
+    Use HELP for help.
+    cqlsh> select * from kibana_sample_data_logs."_doc" limit 3;
+
+     _id                  | agent                                                                                                     | bytes   | clientip            | extension | geo                                                                                               | host                            | index                       | ip                  | machine                                | memory      | message                                                                                                                                                                                                                                         | phpmemory | referer                                                             | request                                                      | response | tags                    | timestamp                           | url                                                                                             | utc_time
+    ----------------------+-----------------------------------------------------------------------------------------------------------+---------+---------------------+-----------+---------------------------------------------------------------------------------------------------+---------------------------------+-----------------------------+---------------------+----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+---------------------------------------------------------------------+--------------------------------------------------------------+----------+-------------------------+-------------------------------------+-------------------------------------------------------------------------------------------------+-------------------------------------
+     _ISA224B3U12qk8z3Q78 | ['Mozilla/5.0 (X11; Linux i686) AppleWebKit/534.24 (KHTML, like Gecko) Chrome/11.0.696.50 Safari/534.24'] |  [6465] | ['236.132.209.242'] |      [''] | [{srcdest: ['CA:MY'], src: ['CA'], coordinates: [{lat: 43.10318, lon: -78.70335}], dest: ['MY']}] | ['elastic-elastic-elastic.org'] | ['kibana_sample_data_logs'] | ['236.132.209.242'] |  [{os: ['win 7'], ram: [18253611008]}] | [2.586e+05] | ['236.132.209.242 - - [2018-08-26T10:51:51.506Z] "GET /people/type:astronauts/name:john-david-f-bartoe/profile HTTP/1.1" 200 6465 "-" "Mozilla/5.0 (X11; Linux i686) AppleWebKit/534.24 (KHTML, like Gecko) Chrome/11.0.696.50 Safari/534.24"'] |  [258600] | ['http://www.elastic-elastic-elastic.com/success/john-o-creighton'] | ['/people/type:astronauts/name:john-david-f-bartoe/profile'] |  ['200'] | ['success', 'security'] | ['2019-12-29 10:51:51.506000+0000'] | ['https://elastic-elastic-elastic.org/people/type:astronauts/name:john-david-f-bartoe/profile'] | ['2018-08-26 10:51:51.506000+0000']
+     L4OA224B3U12qk8zxvxM |                                ['Mozilla/5.0 (X11; Linux x86_64; rv:6.0a1) Gecko/20110421 Firefox/6.0a1'] |  [9842] |     ['1.8.196.147'] |      [''] | [{srcdest: ['DE:CN'], src: ['DE'], coordinates: [{lat: 35.10117, lon: -75.96595}], dest: ['CN']}] |              ['www.elastic.co'] | ['kibana_sample_data_logs'] |     ['1.8.196.147'] | [{os: ['win xp'], ram: [12884901888]}] |        null |                                                                                 ['1.8.196.147 - - [2018-08-05T16:38:26.871Z] "GET /enterprise HTTP/1.1" 200 9842 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:6.0a1) Gecko/20110421 Firefox/6.0a1"'] |      null |                    ['http://facebook.com/warning/stephen-robinson'] |                                              ['/enterprise'] |  ['200'] |     ['success', 'info'] | ['2019-12-08 16:38:26.871000+0000'] |                                                 ['https://www.elastic.co/downloads/enterprise'] | ['2018-08-05 16:38:26.871000+0000']
+     R4SA224B3U12qk8z4hPC |                                ['Mozilla/5.0 (X11; Linux x86_64; rv:6.0a1) Gecko/20110421 Firefox/6.0a1'] | [19561] |    ['190.43.53.42'] |   ['rpm'] | [{srcdest: ['BD:CN'], src: ['BD'], coordinates: [{lat: 36.28002, lon: -80.78607}], dest: ['CN']}] |        ['artifacts.elastic.co'] | ['kibana_sample_data_logs'] |    ['190.43.53.42'] |   [{os: ['win 8'], ram: [9663676416]}] |        null |                                               ['190.43.53.42 - - [2018-08-30T12:40:40.089Z] "GET /beats/metricbeat/metricbeat-6.3.2-i686.rpm HTTP/1.1" 200 19561 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:6.0a1) Gecko/20110421 Firefox/6.0a1"'] |      null |   ['http://www.elastic-elastic-elastic.com/success/pavel-belyayev'] |              ['/beats/metricbeat/metricbeat-6.3.2-i686.rpm'] |  ['200'] |     ['success', 'info'] | ['2020-01-02 12:40:40.089000+0000'] |           ['https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-6.3.2-i686.rpm'] | ['2018-08-30 12:40:40.089000+0000']
+
+    (3 rows)
 
 Create an Elasticsearch index from a Cassandra table
 ----------------------------------------------------
@@ -29,7 +110,7 @@ Use the cassandra CQLSH to create a cassandra Keyspace, a User Defined Type, a T
 
 .. code::
    
-   docker exec -i some-elassandra cqlsh <<EOF
+   docker exec -i test_seed_node_1 cqlsh <<EOF
    CREATE KEYSPACE IF NOT EXISTS test WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': 1};
    CREATE TYPE IF NOT EXISTS test.user_type (first text, last text);
    CREATE TABLE IF NOT EXISTS test.docs (uid int, username frozen<user_type>, login text, PRIMARY KEY (uid));
@@ -161,7 +242,7 @@ when index name does not match the keyspace name.
 
 .. code::
    
-   docker exec -i some-elassandra cqlsh <<EOF
+   docker exec -i test_seed_node_1 cqlsh <<EOF
    ALTER TABLE test.docs ADD es_query text;
    ALTER TABLE test.docs ADD es_options text;
    cqlsh> SELECT uid, login, username FROM test.docs WHERE es_query='{ "query":{"nested":{"path":"username","query":{"term":{"username.first":"barthelemy"}}}}}' AND es_options='indices=test' ALLOW FILTERING;
@@ -334,3 +415,53 @@ Delete the Elasticserach index (does not delete the underlying Cassandra table b
    
    curl -XDELETE http://localhost:9200/test
    {"acknowledged":true}
+
+Cleanup the cluster
+-------------------
+
+Stop all containers:
+
+.. code::
+
+    docker-compose -f docker-compose.yml stop
+
+Docker Troubleshooting
+----------------------
+
+Because each Elassandra node require at least about 1.5Gb of RAM to work properly, small docker configuration can have memory issues.
+Here is 2 nodes configuration using 4.5Gb RAM.
+
+.. code::
+
+    docker stats
+    CONTAINER ID        NAME                CPU %               MEM USAGE / LIMIT     MEM %               NET I/O             BLOCK I/O           PIDS
+    ab91e8cf806b        test_node_1         1.53%               1.86GiB / 1.953GiB    95.23%              10.5MB / 2.89MB     26MB / 89.8MB       113
+    8fe5f0cd6c38        test_seed_node_1    1.41%               1.856GiB / 1.953GiB   95.01%              14.3MB / 16.3MB     230MB / 142MB       144
+    68cdabd681c6        test_kibana_1       1.25%               148.5MiB / 500MiB     29.70%              5.97MB / 11.8MB     98.4MB / 4.1kB      11
+
+If your containers exit, check the OOMKilled and the exit code in your docker container state, 137 is indicating the JVM ran out of memory.
+
+.. code::
+
+    docker inspect test_seed_node_1
+    ...
+    "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 137,
+            "Error": "",
+            "StartedAt": "2019-12-06T14:16:02.2636528Z",
+            "FinishedAt": "2019-12-06T14:16:58.3260739Z"
+        }
+    ...
+
+If needed, increase your docker memory quota from the docker advanced preferences:
+
+.. image:: images/docker-advanced-prefs.png
+   :width: 500px
+   :height: 500px

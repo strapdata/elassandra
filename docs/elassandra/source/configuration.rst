@@ -23,8 +23,8 @@ Elasticsearch paths are set according to the following environment variables and
 
 .. _elassandra_configuration:
 
-Configuration
--------------
+Configuration files
+-------------------
 
 Elasticsearch configuration relies on Cassandra configuration file **conf/cassandra.yaml** for the following parameters.
 
@@ -57,7 +57,6 @@ it would involve network overhead for Elasticsearch inter-node communication. In
    If you use the `GossipingPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>`_ Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
    in mind that this snitch falls back to the PropertyFileSnitch when gossip is not enabled. So, when re-starting the first node, dead nodes can appear in the default DC and rack configured in **conf/cassandra-topology.properties**. It will also
    breaks the replica placement strategy and the computation of the Elasticsearch routing tables. So it is strongly recommended to set the same default rack and datacenter for both the **conf/cassandra-topology.properties** and the **conf/cassandra-rackdc.properties**.
-
 
 Logging configuration
 ---------------------
