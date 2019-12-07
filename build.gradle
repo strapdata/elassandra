@@ -40,6 +40,13 @@ apply plugin: 'nebula.info-scm'
 apply from: 'gradle/build-scan.gradle'
 apply plugin: 'com.github.jk1.dependency-license-report'
 
+licenseReport {
+  renderers = [new CsvReportRenderer(separator:';'), new TextReportRenderer(), new InventoryHtmlReportRenderer('index.html', 'Elassandra License Report')]
+  filters = [new LicenseBundleNormalizer(bundlePath: rootProject.file('buildSrc/src/main/resources/license-normalizer-bundle.json'))]
+  projects = [project] + project.subprojects
+  excludes = [ 'com.strapdata.elasticsearch:elasticsearch-core' ]
+}
+
 repositories {
   mavenLocal()
   maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }

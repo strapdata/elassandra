@@ -50,7 +50,7 @@ install:
   - ./gradlew --version
 
 script:
-#  - ./gradlew server:test -Dbuild.snapshot=false
+  - ./gradlew server:test -Dbuild.snapshot=false
   - ./gradlew assemble -Dbuild.snapshot=false
   - JAVA_HOME=$JAVA8_HOME ./integ-test/test-cleanup-repair.sh $(ls distribution/archives/tar/build/distributions/elassandra-*.tar.gz)
 
