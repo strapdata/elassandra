@@ -460,6 +460,13 @@ subprojects {
         'def': '/var/log/cassandra/gc.log'
       ],
 
+      /* Elassandra hack in order to make elasticsearch-plugin works */
+      'path.plugin_eshome': [
+              'deb': '/usr/share/cassandra',
+              'rpm': '/usr/share/cassandra',
+              'def': '$(dirname $(dirname "$SCRIPT"))'
+      ],
+
       'heap.min': defaultHeapSize,
       'heap.max': defaultHeapSize,
 
