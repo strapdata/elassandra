@@ -287,20 +287,20 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             return oldGossipNode;
         }
 
-        public GossipNode update(final InetAddress endpoint, EndpointState epState, String source, boolean allowClusterStateUpdate) {
+        public void update(final InetAddress endpoint, EndpointState epState, String source, boolean allowClusterStateUpdate) {
             if (epState.getApplicationState(ApplicationState.HOST_ID) == null || epState.getApplicationState(ApplicationState.HOST_ID).value == null)
-                return null;
+                return;
 
             UUID hostId = UUID.fromString(epState.getApplicationState(ApplicationState.HOST_ID).value);
             String x1 = epState.getApplicationState(ApplicationState.X1) == null ? null : epState.getApplicationState(ApplicationState.X1).value;
-            return update(hostId, source, endpoint, getInternalIp(epState), getRpcAddress(epState), discoveryNodeStatus(epState), x1,  allowClusterStateUpdate);
+            update(hostId, source, endpoint, getInternalIp(epState), getRpcAddress(epState), discoveryNodeStatus(epState), x1,  allowClusterStateUpdate);
         }
 
         /**
          * Trigger routing table update if node status or x1 changed, or a new ALIVE node appear.
          * Trigger nodes update if node IP or  name changed
          */
-        private GossipNode update(final UUID hostId,
+        private void update(final UUID hostId,
                                  final String source,
                                  final InetAddress endpoint,
                                  final InetAddress internalIp,
@@ -312,12 +312,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             if (localNode().getId().equals(hostId)) {
                 // ignore GOSSIP update related to our self node.
                 logger.debug("Ignoring GOSSIP update for node id={} ip={} because it's mine", hostId, endpoint);
+                return;
             } else {
                 logger.debug("updating id={} endpoint={} source=[{}] status=[{}] x1=[{}]", hostId, endpoint, source, status, x1);
             }
 
             final TransportAddress addr = new TransportAddress(Boolean.getBoolean("es.use_internal_address") ? internalIp : rpcAddress, publishPort());
-            return remoteMembers.compute(hostId, (k,gn) -> {
+            remoteMembers.compute(hostId, (k,gn) -> {
                 boolean nodeUpdate = false;
                 boolean routingUpdate = false;
                 Map<String, ShardRoutingState> x1Map = new HashMap<>();
