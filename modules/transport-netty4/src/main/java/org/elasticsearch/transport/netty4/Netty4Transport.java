@@ -64,8 +64,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
-import static org.elasticsearch.common.settings.Setting.byteSizeSetting;
-import static org.elasticsearch.common.settings.Setting.intSetting;
+import static org.elasticsearch.common.settings.Setting.*;
 import static org.elasticsearch.common.util.concurrent.ConcurrentCollections.newConcurrentMap;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
@@ -216,8 +215,21 @@ public class Netty4Transport extends TcpTransport {
         return new ClientChannelInitializer();
     }
 
-    static final AttributeKey<Netty4TcpChannel> CHANNEL_KEY = AttributeKey.newInstance("es-channel");
-    static final AttributeKey<Netty4TcpServerChannel> SERVER_CHANNEL_KEY = AttributeKey.newInstance("es-server-channel");
+    static final AttributeKey<Netty4TcpChannel> CHANNEL_KEY;
+    static final AttributeKey<Netty4TcpServerChannel> SERVER_CHANNEL_KEY;
+
+    // We can have more than one Netty4Transport class instances initialized from several classloader,
+    // but AttributeKey should be created once from netty in the cassandra system classloader. So this
+    // static block insure that CHANNEL_KEY is create only-once.
+    static {
+        CHANNEL_KEY = AttributeKey.valueOf("es-channel") == null ?
+            AttributeKey.newInstance("es-channel") :
+            AttributeKey.valueOf("es-channel");
+
+        SERVER_CHANNEL_KEY = AttributeKey.valueOf("es-server-channel") == null ?
+            AttributeKey.newInstance("es-server-channel") :
+            AttributeKey.valueOf("es-server-channel");
+    }
 
     @Override
     protected Netty4TcpChannel initiateChannel(DiscoveryNode node) throws IOException {
