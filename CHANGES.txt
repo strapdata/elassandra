@@ -1,6 +1,9 @@
 6.2.3.22 - 2019-11-28
-  * Fix DecodeSmile command issue
   * Update Apache Cassandra version from 3.11.4 to 3.11.5
+  * Fix DecodeSmile command issue
+  * Fix possible gossip update race condition on bootstrap
+  * Add automated integration tests based on ECM (CCM for Elassandra)
+  * Improve unit testing
 
 6.2.3.21 - 2018-10-16
   * Remove elastic_admin RF adjustment
