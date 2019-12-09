@@ -427,8 +427,8 @@ public final class NodeEnvironment  implements Closeable {
                 return SystemKeyspace.getLocalHostId().toString();
             }
         } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException | java.lang.NoClassDefFoundError e) {
-            Loggers.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId", e);
         }
+        Loggers.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId");
         if (settings != null && settings.hasValue(NODE_ID_SEED_SETTING.getKey())) {
             Random random = Randomness.get(settings, NODE_ID_SEED_SETTING);
             return UUIDs.randomBase64UUID(random);
