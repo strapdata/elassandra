@@ -23,6 +23,7 @@ import ch.qos.logback.core.joran.spi.JoranException;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
@@ -1141,11 +1142,7 @@ public class ClusterService extends BaseClusterService {
 
     Void createElasticAdminKeyspace()  {
         try {
-            Map<String, String> replication = new HashMap<String, String>();
-
-            replication.put("class", NetworkTopologyStrategy.class.getName());
-            replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(getLocalDataCenterSize()));
-
+            Map<String, String> replication = ImmutableMap.of("class", NetworkTopologyStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter(), "1");
             String createKeyspace = String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s;",
                 elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
             logger.info(createKeyspace);
