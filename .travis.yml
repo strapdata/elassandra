@@ -57,7 +57,7 @@ script:
 before_deploy:
   - export TARBALL=$(ls distribution/archives/tar/build/distributions/elassandra-*.tar.gz)
   - export ZIPBALL=$(ls distribution/archives/zip/build/distributions/elassandra-*.zip)
-  - export DEBPKG=$(ls distribution/packages/deb/build/distributions/elassandra-*.deb)
+  - export DEBPKG=$(ls distribution/packages/deb/build/distributions/elassandra_*.deb)
   - export RPMPKG=$(ls distribution/packages/rpm/build/distributions/elassandra-*.rpm)
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
