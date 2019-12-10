@@ -35,7 +35,7 @@ cache:
     - $HOME/google-cloud-sdk/
 
 before_install:
-  - wget -O ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
+  - wget -qO ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
   - unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
 
 install:
@@ -50,9 +50,9 @@ install:
   - ./gradlew --version
 
 script:
-  - ./gradlew server:test -Dbuild.snapshot=false
-  - ./gradlew assemble -Dbuild.snapshot=false
-  - JAVA_HOME=$JAVA8_HOME ./integ-test/test-cleanup-repair.sh $(ls distribution/archives/tar/build/distributions/elassandra-*.tar.gz)
+  - JAVA_HOME=$JAVA12_HOME ./gradlew server:test -Dbuild.snapshot=false
+  - JAVA_HOME=$JAVA12_HOME ./gradlew assemble -Dbuild.snapshot=false
+  - JAVA_HOME=$JAVA8_HOME  ./integ-test/test-cleanup-repair.sh $(ls distribution/archives/tar/build/distributions/elassandra-*.tar.gz)
 
 before_deploy:
   - export TARBALL=$(ls distribution/archives/tar/build/distributions/elassandra-*.tar.gz)
@@ -77,49 +77,6 @@ deploy:
       tags: true
       repo: strapdata/elassandra
 
-  - provider: releases
-    overwrite: true
-    draft: false
-    api_key:
-      secure: "NN1SqRo+yryyjsnuan7rtqFd7IgVPTTaWO1m8ZptBdPENvapT2SXiCXa9Clrtgyamt3B/j5G8CdRp480xSXI/yUBwHHDE1Q0OV7eV1CfzmZvlXoxS1rWaDByDuFnvXdoQTBij1ytZHgVsfgmHdU47CcmQVpvQi/IQmu+9WEMpIt55l5fLNvIuy5UiynYDchBN1MYkJLxzlSoqmZdmM58DtL/vBg1nDNqsxvaesyh+8RzoQ33uM4+BWItpzjdvwbfCYN5Bsq8lvdPuxCYeQ5b7RWYPxpTNaV7zS8XDvcbgss7DwZ7w59YloDNvL0WbliE7pma3VHnvctX+oQY/LWhdJ3vJwNvmuwW9zgNUz70s5ec9Eos105xWWiKakIMEgtUdW35VBWEdnQdTYo9zbL/2deScXugcWkMv1Cb/EDeo6gFbc6cBL9TivCyWsv7GqMMC13X9Sj3vDi4S+wzMXQAuDgkdFTY2CfjAiFPRlxe9wPn00RAmnpq46Cma+NoAvnqMuCglKi/WAak8byxEMLRskrb5zHXFKTG8xCqiPJpz7hxnMoRULwn9jJj/6xRQlemKY4eF0DLebWmJ8hpebdX+tx6iMhI0qvpOb3j0uvySIi0bmR/6B9PlhULUNzwf+LFoSA37DCxcqDdOQX/qp8FJdBk7fM55lkVvhe+bCzufRg="
-    file:
-      - "$TARBALL"
-      - "$ZIPBALL"
-      - "$RPMPKG"
-      - "$DEBPKG"
-    skip_cleanup: true
-    on:
-      tags: true
-      repo: strapdata/elassandra-rc
-  
-  # publish snapshot artifact in strapdata nexus
-  - provider: script
-    skip_cleanup: true
-    script: 
-       - ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
-    on:
-      tags: false
-      repo: strapdata/elassandra
-
-  # publish release artifact in strapdata nexus
-  - provider: script
-    skip_cleanup: true
-    script: 
-       - ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
-    on:
-      tags: true
-      repo: strapdata/elassandra
-      
-  # publish RMP+DEB in strapdata repo
-  - provider: script
-    skip_cleanup: true
-    script: 
-       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})"
-       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
-    on:
-      tags: true
-      repo: strapdata/elassandra
-      
   # build, test and push docker images
   - provider: script
     skip_cleanup: true
@@ -134,3 +91,32 @@ deploy:
     on:
       tags: true
       repo: strapdata/elassandra
+  
+  # publish snapshot artifact in strapdata nexus
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - JAVA_HOME=$JAVA12_HOME ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+    on:
+      tags: false
+      repo: strapdata/elassandra
+
+  # publish release artifact in strapdata nexus
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - JAVA_HOME=$JAVA12_HOME ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
+    on:
+      tags: true
+      repo: strapdata/elassandra
+      
+  # publish RMP+DEB in strapdata repo
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})"
+       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+    on:
+      tags: true
+      repo: strapdata/elassandra
+
