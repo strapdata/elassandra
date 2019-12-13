@@ -44,7 +44,7 @@ Primary term and Sequence Number
 
 As explained `here <https://www.elastic.co/blog/elasticsearch-sequence-ids-6-0>`_, Elasticsearch introduced **_primary_term** and **_seq_no** in order to manage
 shard replication consistently and store these fields in lucene documents. But in Elassandra, replication is fully managed by cassandra and all shard are considered as primary. Thus, these two
-fields are not more stored in lucene by the default elassandra lucene engine named **VersionLessInternalEngine**. Consequently, all search results comes with *_primary_term = 0* and *_seq_no = 1*.
+fields are not more stored in lucene by the default elassandra lucene engine named **VersionLessInternalEngine**. Consequently, all search results comes with *_primary_term = 1* and *_seq_no = 1*.
 
 Index and type names
 --------------------

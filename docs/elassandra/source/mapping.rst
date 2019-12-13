@@ -72,9 +72,9 @@ Theses parameters below control the Cassandra mapping.
 | ``cql_collection``          | **list**, set, singleton or none | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                                                                                       |
 |                             |                                  | For `copyTo <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/copy-to.html>`_ fields, **none** means the field is not backed into Cassandra but just indexed by Elasticsearch.                                                           |
 +-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_struct``              | **udt**, map or map_opaque       | Control how an object or nested field is mapped to a User Defined Type or to a Cassandra map<text,?>. Default is **udt**. 																														   |
+| ``cql_struct``              | **udt**, map or opaque_map       | Control how an object or nested field is mapped to a User Defined Type or to a Cassandra.                                                                                                                                                           |
 |                             |                                  | When using **map**, each new key is registred as a subfield in the elasticsearch mapping through a mapping update request.                                                                                                                          |
-|                             |                                  | When using **map_opaque**, each new key is silently indexed as a new field, but the elasticsearch mapping is not updated.                                                                                                                           |
+|                             |                                  | When using **opaque_map**, each new key is silently indexed as a new field, but the elasticsearch mapping is not updated.                                                                                                                           |
 +-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | ``cql_static_column``       | true or **false**                | When *true*, the underlying CQL column is static. Default is **false**.                                                                                                                                                                             |
 +-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -192,6 +192,11 @@ Meta-Fields
 * ``_parent`` is string representation of the parent document primary key. If the parent document primary key is composite, this is string representation of columns defined by ``cql_parent_pk`` in the mapping. See `Parent-Child Relationship`_.
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
 * ``_node`` is an optional meta-field introduced by Elassandra, valued with the Cassandra host id, allowing to check the datacenter consistency.
+
+CQL mapper extensions
+---------------------
+
+Elassandra introduce some CQL mapper extentions in order to map Elasticsearch field to a column in a Cassandra table.
 
 Mapping change with zero downtime
 ---------------------------------
