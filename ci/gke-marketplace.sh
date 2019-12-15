@@ -25,8 +25,8 @@ init() {
     git config --global user.name "Travis CI"
     NEW_VERSION=$(echo ${TRAVIS_TAG} |  sed 's/v\([0-9]*\.[0-9]*.\.[0-9]*\.[0-9]*\).*/\1/')
 
-    if [[ ${TRAVIS_TAG} != v6.2.3.+([0-9]) ]]; then
-      echo "gke-marketplace.sh should only run with release tags v6.2.3.x"
+    if [[ ${TRAVIS_TAG} != v6.8.4.+([0-9]) ]]; then
+      echo "gke-marketplace.sh should only run with release tags v6.8.4.x"
       return 1
     fi
 
@@ -34,10 +34,10 @@ init() {
     NEW_VERSION=$1
   fi
 
-  if [[ ${NEW_VERSION} == 6.2.3.* ]]; then
+  if [[ ${NEW_VERSION} == 6.8.4.* ]]; then
     return 0
   else
-    echo "gke-marketplace.sh should only run for v6.2.3.x"
+    echo "gke-marketplace.sh should only run for v6.8.4.x"
     return 1
   fi
 }

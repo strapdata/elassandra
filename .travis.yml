@@ -85,12 +85,12 @@ deploy:
       tags: true
 
   # bump and push to gke marketplace repo, build gke images, push to gcr.io
-  - provider: script
-    skip_cleanup: true
-    script: bash ./ci/gke-marketplace.sh
-    on:
-      tags: true
-      repo: strapdata/elassandra
+  # - provider: script
+  #  skip_cleanup: true
+  #  script: bash ./ci/gke-marketplace.sh
+  #  on:
+  #    tags: true
+  #    repo: strapdata/elassandra
   
   # publish snapshot artifact in strapdata nexus
   - provider: script
