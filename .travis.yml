@@ -96,7 +96,7 @@ deploy:
   - provider: script
     skip_cleanup: true
     script: 
-       - JAVA_HOME=$JAVA12_HOME ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+       - JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
     on:
       tags: false
       repo: strapdata/elassandra
@@ -105,7 +105,7 @@ deploy:
   - provider: script
     skip_cleanup: true
     script: 
-       - JAVA_HOME=$JAVA12_HOME ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
+       - JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
     on:
       tags: true
       repo: strapdata/elassandra
