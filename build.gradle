@@ -47,11 +47,6 @@ licenseReport {
   excludes = [ 'com.strapdata.elasticsearch:elasticsearch-core' ]
 }
 
-repositories {
-  mavenLocal()
-  maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
-}
-
 // common maven publishing configuration
 allprojects {
   group = 'com.strapdata.elasticsearch'
