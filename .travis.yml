@@ -80,7 +80,7 @@ deploy:
   # build, test and push docker images
   - provider: script
     skip_cleanup: true
-    script: bash ./ci/docker.sh
+    script: ELASSANDRA_TAG=${TRAVIS_TAG:1} ./ci/docker.sh
     on:
       tags: true
 
