@@ -688,6 +688,108 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
 
+    // #315 Nested objects' fields not indexed 
+    public void testNestedFieldMappingUpdate() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("nested")
+                            .field("type", "nested")
+                        .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test-issue-index").addMapping("test-issue", mapping));
+        ensureGreen("test-issue-index");
+        
+        assertThat(client().prepareIndex("test-issue-index", "test-issue","0")
+                .setSource("{\n" + 
+                        "\"fieldA\": \"A\",\n" + 
+                        "\"fieldB\": \"B\"" +
+                        "}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        assertThat(client().prepareIndex("test-issue-index", "test-issue","1")
+                .setSource("{\n" + 
+                        "\"fieldA\": \"A\",\n" + 
+                        "\"fieldB\": \"B\",\n" + 
+                        "\"nested\": {\n" + 
+                        "     \"fieldC\": \"C\",\n" + 
+                        "     \"fieldD\": \"D\",\n" + 
+                        "     \"fieldE\": \"E\",\n" + 
+                        "     \"fieldF\": \"F\"\n" + 
+                        "   }\n" + 
+                        "}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        assertThat(client().prepareIndex("test-issue-index", "test-issue","2")
+                .setSource("{\n" + 
+                        "\"fieldA\": \"A\",\n" + 
+                        "\"fieldB\": \"B\",\n" + 
+                        "\"nested\": {\n" + 
+                        "    \"fieldG\": \"G\",\n" + 
+                        "    \"fieldH\": \"H\",\n" + 
+                        "    \"fieldI\": \"I\",\n" + 
+                        "    \"fieldJ\": \"J\"\n" + 
+                        "  }\n" + 
+                        "}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        
+        SearchResponse resp = client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.matchAllQuery())
+                .setFetchSource(true)
+                .get();
+        System.out.println("hits[0]="+resp.getHits().getHits()[0].getSourceAsString());
+        System.out.println("hits[1]="+resp.getHits().getHits()[1].getSourceAsString());
+        System.out.println("hits[2]="+resp.getHits().getHits()[2].getSourceAsString());
+        
+        assertThat(resp.getHits().getTotalHits(), equalTo(3L));
+        
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.termQuery("fieldA.keyword", "A"))
+                .get().getHits().getTotalHits(), equalTo(3L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.termQuery("fieldB.keyword", "B"))
+                .get().getHits().getTotalHits(), equalTo(3L));
+        
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldC.keyword", "C"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldD.keyword", "D"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldE.keyword", "E"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldF.keyword", "F"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldG.keyword", "G"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldH.keyword", "H"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldI.keyword", "I"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test-issue-index")
+                .setTypes("test-issue")
+                .setQuery(QueryBuilders.nestedQuery("nested", QueryBuilders.termQuery("nested.fieldJ.keyword", "J"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        
+    }
+    
     // #197 Deletion of a List element removes the document on ES
     public void testDeleteInUDTList() throws Exception {
         createIndex("test");
