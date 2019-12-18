@@ -298,6 +298,7 @@ public class SchemaManager extends AbstractComponent {
         if (!userTypeOption.isPresent()) {
             return createUserTypeIfNotExists(ksm, typeName, fields, mutations, events);
         } else {
+            KeyspaceMetadata ksmOut = ksm;
             UserType userType = userTypeOption.get();
             UTName name = new UTName(new ColumnIdentifier(ksm.name, true), ci);
             logger.trace("update keyspace.type=[{}].[{}] fields={}", ksm.name, typeName, fields);
@@ -308,7 +309,8 @@ public class SchemaManager extends AbstractComponent {
                     // add missing field
                     logger.trace("add field to keyspace.type=[{}].[{}] field={}", ksm.name, typeName, fieldIdentifier);
                     AlterTypeStatement ats = AlterTypeStatement.addition(name, fieldIdentifier, field.getValue());
-                    userType = ats.updateUserType(ksm, mutations, events);
+                    userType = ats.updateUserType(ksmOut, mutations, events);
+                    ksmOut = ksmOut.withSwapped(ksmOut.types.without(userType.name).with(userType));
                 } else {
                     if (!userType.fieldType(i).asCQL3Type().equals(field.getValue().prepare(ksm)))
                         throw new InvalidRequestException(
@@ -316,7 +318,7 @@ public class SchemaManager extends AbstractComponent {
                                         field.getKey(), userType.fieldType(i).asCQL3Type(), field.getValue().prepare(ksm)));
                 }
             }
-            return Pair.create(ksm, userType);
+            return Pair.create(ksmOut, userType);
         }
     }
 
