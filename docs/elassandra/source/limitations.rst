@@ -49,13 +49,15 @@ fields are not more stored in lucene by the default elassandra lucene engine nam
 Index and type names
 --------------------
 
-Because cassandra does not support special caraters in keyspace and table names, Elassandra automatically replaces dots (.) and hyphens (-) characters
+Because Cassandra does not support special characters in keyspace and table names, Elassandra automatically replaces dots (.) and hyphens (-) characters
 by underscore (_) in index names, and hyphen (-) characters by underscore (_) in type names to create underlying Cassandra keyspaces and tables.
 
 When such a modification occurs for document type names, Elassandra keeps type names translation in memory to correctly translate back table names to documents types.
-Obviously, if you have types names like *xxx-xxx* and *xxx_xxx* in the sames underlying keyspace, bijective translation is not possible and you will get some trouble.
+Obviously, if you have types names like *xxx-xxx* and *xxx_xxx* in the same underlying keyspace, bijective translation is not possible and you can get some trouble.
 
-Moreover, Cassandra table names are limited to 48 caraters, so Elasticsearch type names are also limited to 48 characters.
+Moreover, Cassandra table names are limited to 48 characters, so Elasticsearch type names are also limited to 48 characters. If you need 
+longer Elasticsearch index names, you can increase this limit with the Cassandra system property ``cassandra.max_name_length``, but be careful 
+with the maximum filename length on your platform in you data directory.
 
 Column names
 ------------
