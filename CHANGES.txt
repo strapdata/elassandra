@@ -1,3 +1,7 @@
+6.2.3.23 - 2019-12-28
+  * Fix #315 missing subfield when indexing a doc with 2 or more new subfields
+  * Add support for index name longer than 48 characters
+
 6.2.3.22 - 2019-11-28
   * Update Apache Cassandra version from 3.11.4 to 3.11.5
   * Fix DecodeSmile command issue
