@@ -19,7 +19,7 @@
 
 package org.elasticsearch.indices;
 
-import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.HostFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.action.admin.indices.rollover.Condition;
 import org.elasticsearch.action.admin.indices.rollover.MaxAgeCondition;
@@ -166,7 +166,7 @@ public class IndicesModule extends AbstractModule {
         builtInMetadataMappers.put(ParentFieldMapper.NAME, new ParentFieldMapper.TypeParser());
         builtInMetadataMappers.put(SeqNoFieldMapper.NAME, new SeqNoFieldMapper.TypeParser());
         builtInMetadataMappers.put(TokenFieldMapper.NAME, new TokenFieldMapper.TypeParser());
-        builtInMetadataMappers.put(NodeFieldMapper.NAME, new NodeFieldMapper.TypeParser());
+        builtInMetadataMappers.put(HostFieldMapper.NAME, new HostFieldMapper.TypeParser());
         //_field_names must be added last so that it has a chance to see all the other mappers
         builtInMetadataMappers.put(FieldNamesFieldMapper.NAME, new FieldNamesFieldMapper.TypeParser());
         return Collections.unmodifiableMap(builtInMetadataMappers);

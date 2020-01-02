@@ -21,6 +21,7 @@ import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.index.mapper.EnabledAttributeMapper;
 import org.elasticsearch.index.mapper.KeywordFieldMapper;
 import org.elasticsearch.index.mapper.KeywordFieldMapper.KeywordFieldType;
 import org.elasticsearch.index.mapper.MappedFieldType;
@@ -30,40 +31,51 @@ import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 
 /**
  *  Mapper for the _node field, the cassandra host id.
  **/
-public class NodeFieldMapper extends MetadataFieldMapper {
+public class HostFieldMapper extends MetadataFieldMapper {
 
-    public static final String NAME = "_node";
-    public static final String CONTENT_TYPE = "_node";
+    public static final String NAME = "_host";
+    public static final String CONTENT_TYPE = "_host";
 
     public static class Defaults extends KeywordFieldMapper.Defaults {
-        public static final String NAME = NodeFieldMapper.NAME;
-        public static final MappedFieldType NODE_FIELD_TYPE = new NodeFieldType();
+        public static final String NAME = HostFieldMapper.NAME;
+        public static final MappedFieldType HOST_FIELD_TYPE = new NodeFieldType();
 
         static {
-            NODE_FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-            NODE_FIELD_TYPE.setStored(false);
-            NODE_FIELD_TYPE.setOmitNorms(true);
-            NODE_FIELD_TYPE.setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
-            NODE_FIELD_TYPE.setSearchAnalyzer(Lucene.KEYWORD_ANALYZER);
-            NODE_FIELD_TYPE.freeze();
+            HOST_FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+            HOST_FIELD_TYPE.setStored(false);
+            HOST_FIELD_TYPE.setOmitNorms(true);
+            HOST_FIELD_TYPE.setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
+            HOST_FIELD_TYPE.setSearchAnalyzer(Lucene.KEYWORD_ANALYZER);
+            HOST_FIELD_TYPE.freeze();
         }
     }
+    
+    public static class Builder extends MetadataFieldMapper.Builder<Builder, HostFieldMapper> {
 
-    public static class Builder extends MetadataFieldMapper.Builder<Builder, NodeFieldMapper> {
+        private EnabledAttributeMapper enabledState = EnabledAttributeMapper.UNSET_DISABLED;
 
         public Builder() {
-            super(Defaults.NAME, Defaults.NODE_FIELD_TYPE, Defaults.FIELD_TYPE);
+            super(Defaults.NAME, Defaults.HOST_FIELD_TYPE, Defaults.FIELD_TYPE);
+        }
+
+        public Builder enabled(EnabledAttributeMapper enabled) {
+            this.enabledState = enabled;
+            return builder;
         }
 
         @Override
-        public NodeFieldMapper build(BuilderContext context) {
-            return new NodeFieldMapper(context.indexSettings());
+        public HostFieldMapper build(BuilderContext context) {
+            setupFieldType(context);
+            return new HostFieldMapper(fieldType, enabledState, 0, context.indexSettings());
         }
     }
 
@@ -71,13 +83,23 @@ public class NodeFieldMapper extends MetadataFieldMapper {
         @Override
         public MetadataFieldMapper.Builder<?, ?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
             Builder builder = new Builder();
+            for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
+                Map.Entry<String, Object> entry = iterator.next();
+                String fieldName = entry.getKey();
+                Object fieldNode = entry.getValue();
+                if (fieldName.equals("enabled")) {
+                    EnabledAttributeMapper enabledState = nodeBooleanValue(fieldNode, fieldName) ? EnabledAttributeMapper.ENABLED : EnabledAttributeMapper.DISABLED;
+                    builder.enabled(enabledState);
+                    iterator.remove();
+                }
+            }
             return builder;
         }
 
         @Override
         public MetadataFieldMapper getDefault(MappedFieldType fieldType, ParserContext parserContext) {
             final Settings indexSettings = parserContext.mapperService().getIndexSettings().getSettings();
-            return new NodeFieldMapper(indexSettings);
+            return new HostFieldMapper(indexSettings);
         }
     }
 
@@ -106,22 +128,24 @@ public class NodeFieldMapper extends MetadataFieldMapper {
         }
 
     }
+    
+    private EnabledAttributeMapper enabledState = EnabledAttributeMapper.UNSET_DISABLED;
 
-    private NodeFieldMapper(Settings indexSettings) {
-        super(NAME, Defaults.NODE_FIELD_TYPE, Defaults.NODE_FIELD_TYPE, indexSettings);
+    private HostFieldMapper(Settings indexSettings) {
+        super(NAME, Defaults.HOST_FIELD_TYPE, Defaults.HOST_FIELD_TYPE, indexSettings);
     }
 
+    private HostFieldMapper(MappedFieldType fieldType, EnabledAttributeMapper enabled, long defaultToken, Settings indexSettings) {
+        super(NAME, fieldType, Defaults.HOST_FIELD_TYPE, indexSettings);
+        this.enabledState = enabled;
+    }
+    
     @Override
     public void preParse(ParseContext context) throws IOException {
     }
 
     @Override
     public void parse(ParseContext context) throws IOException {
-    }
-
-    @Override
-    public void postParse(ParseContext context) throws IOException {
-        super.parse(context);
     }
 
     @Override

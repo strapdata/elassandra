@@ -871,7 +871,7 @@ public class ElasticSecondaryIndex implements Index {
                 logger.debug("index.type=[{}.{}] {}=[{}]", name, this.type, IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING.getKey(), refresh);
 
                 this.snapshot = getMetaSettings(metadata.settings(), metaMap, IndexMetaData.INDEX_SNAPSHOT_WITH_SSTABLE_SETTING);
-                this.includeNodeId = getMetaSettings(metadata.settings(), metaMap, IndexMetaData.INDEX_INCLUDE_NODE_ID_SETTING);
+                this.includeNodeId = getMetaSettings(metadata.settings(), metaMap, IndexMetaData.INDEX_INCLUDE_HOST_ID_SETTING);
 
                 this.index_on_compaction = getMetaSettings(metadata.settings(), metaMap, IndexMetaData.INDEX_INDEX_ON_COMPACTION_SETTING);
                 this.index_static_columns = getMetaSettings(metadata.settings(), metaMap, IndexMetaData.INDEX_INDEX_STATIC_COLUMNS_SETTING);
@@ -2179,7 +2179,7 @@ public class ElasticSecondaryIndex implements Index {
                     context.docMapper.seqNoFieldMapper().createField(context, null); // add zero _seq_no
 
                     if (indexInfo.includeNodeId)
-                        context.docMapper.nodeFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
+                        context.docMapper.hostFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
 
                     if ((this instanceof WideRowcument || context.docMapper.routingFieldMapper().fieldType().hasDocValues()) && baseCfs.metadata.partitionKeyColumns().size() > 1)
                         context.docMapper.routingFieldMapper().createField(context, partitionKey);

@@ -191,7 +191,7 @@ Meta-Fields
 * ``_ttl``  and ``_timestamp`` are mapped to the Cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_ in Elassandra 5.x. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular Cassandra column if there is one in the underlying table. Moreover, when indexing a document through the Elasticsearch API, all Cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
 * ``_parent`` is string representation of the parent document primary key. If the parent document primary key is composite, this is string representation of columns defined by ``cql_parent_pk`` in the mapping. See `Parent-Child Relationship`_.
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
-* ``_node`` is an optional meta-field introduced by Elassandra, valued with the Cassandra host id, allowing to check the datacenter consistency.
+* ``_host`` is an optional meta-field introduced by Elassandra, valued with the Cassandra host id, allowing to check the datacenter consistency.
 
 CQL mapper extensions
 ---------------------
@@ -942,9 +942,8 @@ Your mapping must also defines a Cassandra partition key as text, and a clusteri
 Check Cassandra consistency with Elasticsearch
 ----------------------------------------------
 
-When the ``index.include_node = true``  (default is false), the ``_node`` metafield containing the Cassandra host id is included in every indexed document.
+When the ``index.include_host = true``  (default is false), the ``_host`` metafield containing the Cassandra host id is included in every indexed document.
 This allows distinguishing multiple copies of a document when the datacenter replication factor is greater than one. Then a token range aggregation allows counting the number of documents for each token range and for each Cassandra node.
-
 
 In the following example, we have 1000 accounts documents in a keyspace with RF=2 in a two nodes datacenter, with each token ranges having the same number of document for the two nodes.
 
@@ -958,7 +957,7 @@ In the following example, we have 1000 accounts documents in a keyspace with RF=
                     },
                    "aggs": { 
                       "nodes" : { 
-                         "terms" : { "field" : "_node" } 
+                         "terms" : { "field" : "_host" } 
                       } 
                    }
                }
@@ -1037,6 +1036,7 @@ In the following example, we have 1000 accounts documents in a keyspace with RF=
        }
      }
    }
-   
+
+The same document count for all replica of a token range does not guarantee consistency between all replicas, but a different count allows to detect an inconsistency.
 Please note that according to your use case, you should add a filter to your query to ignore write operations occurring during the check.
 

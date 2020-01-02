@@ -181,7 +181,7 @@ public class ClusterService extends BaseClusterService {
     /**
      * When true, add the cassandra node id to documents (for use with the token aggregation feature)
      */
-    public static final String INCLUDE_NODE_ID       = "include_node_id";
+    public static final String INCLUDE_HOST_ID       = "include_node_id";
 
     /**
      * When true, re-indexes a row when compacting, usefull to delete expired documents or columns.
@@ -252,7 +252,7 @@ public class ClusterService extends BaseClusterService {
     public static final String SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT = SYSTEM_PREFIX+MAPPING_UPDATE_TIMEOUT;
     public static final String SETTING_SYSTEM_SECONDARY_INDEX_CLASS = SYSTEM_PREFIX+SECONDARY_INDEX_CLASS;
     public static final String SETTING_SYSTEM_SEARCH_STRATEGY_CLASS = SYSTEM_PREFIX+SEARCH_STRATEGY_CLASS;
-    public static final String SETTING_SYSTEM_INCLUDE_NODE_ID = SYSTEM_PREFIX+INCLUDE_NODE_ID;
+    public static final String SETTING_SYSTEM_INCLUDE_NODE_ID = SYSTEM_PREFIX+INCLUDE_HOST_ID;
     public static final String SETTING_SYSTEM_INDEX_ON_COMPACTION = SYSTEM_PREFIX+INDEX_ON_COMPACTION;
     public static final String SETTING_SYSTEM_SYNCHRONOUS_REFRESH = SYSTEM_PREFIX+SYNCHRONOUS_REFRESH;
     public static final String SETTING_SYSTEM_DROP_ON_DELETE_INDEX = SYSTEM_PREFIX+DROP_ON_DELETE_INDEX;
@@ -264,7 +264,7 @@ public class ClusterService extends BaseClusterService {
     public static final String SETTING_SYSTEM_INDEX_INSERT_ONLY = SYSTEM_PREFIX+INDEX_INSERT_ONLY;
     public static final String SETTING_SYSTEM_INDEX_OPAQUE_STORAGE = SYSTEM_PREFIX+INDEX_OPAQUE_STORAGE;
 
-    public static final String SETTING_CLUSTER_INCLUDE_NODE_ID = CLUSTER_PREFIX+INCLUDE_NODE_ID;
+    public static final String SETTING_CLUSTER_INCLUDE_NODE_ID = CLUSTER_PREFIX+INCLUDE_HOST_ID;
 
     // elassandra cluster settings
     public static final String SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT = CLUSTER_PREFIX+MAPPING_UPDATE_TIMEOUT;

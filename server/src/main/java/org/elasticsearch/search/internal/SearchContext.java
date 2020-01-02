@@ -137,7 +137,7 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
      */
     public abstract void preProcess(boolean rewrite);
 
-    public boolean includeNode() {
+    public boolean includeHost() {
         return this.includeNode;
     }
 

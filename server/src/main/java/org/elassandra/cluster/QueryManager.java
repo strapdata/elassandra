@@ -43,7 +43,7 @@ import org.apache.cassandra.utils.UUIDGen;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.index.ElasticSecondaryIndex;
-import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.HostFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
@@ -440,7 +440,7 @@ public class QueryManager extends AbstractComponent {
                         }
                     }
                     break;
-                case NodeFieldMapper.NAME:
+                case HostFieldMapper.NAME:
                     // nothing to add.
                     break;
                 default:

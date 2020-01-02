@@ -326,9 +326,9 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public static final Setting<String> INDEX_PARTITION_FUNCTION_CLASS_SETTING =
             Setting.simpleString(SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName(), Property.Final, Property.IndexScope);
 
-    public static final String SETTING_INCLUDE_NODE_ID = INDEX_SETTING_PREFIX+ClusterService.INCLUDE_NODE_ID;
-    public static final Setting<Boolean> INDEX_INCLUDE_NODE_ID_SETTING =
-            Setting.boolSetting(SETTING_INCLUDE_NODE_ID, false, Property.Final, Property.IndexScope);
+    public static final String SETTING_INCLUDE_HOST_ID = INDEX_SETTING_PREFIX+ClusterService.INCLUDE_HOST_ID;
+    public static final Setting<Boolean> INDEX_INCLUDE_HOST_ID_SETTING =
+            Setting.boolSetting(SETTING_INCLUDE_HOST_ID, false, Property.Final, Property.IndexScope);
 
     public static final String SETTING_INDEX_ON_COMPACTION = INDEX_SETTING_PREFIX+ClusterService.INDEX_ON_COMPACTION;
     public static final Setting<Boolean> INDEX_INDEX_ON_COMPACTION_SETTING =

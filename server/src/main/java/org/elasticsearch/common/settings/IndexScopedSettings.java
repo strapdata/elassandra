@@ -85,7 +85,7 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexMetaData.INDEX_SEARCH_STRATEGY_CLASS_SETTING,
         IndexMetaData.INDEX_SECONDARY_INDEX_CLASS_SETTING,
         IndexMetaData.INDEX_DROP_ON_DELETE_INDEX_SETTING,
-        IndexMetaData.INDEX_INCLUDE_NODE_ID_SETTING,
+        IndexMetaData.INDEX_INCLUDE_HOST_ID_SETTING,
         IndexMetaData.INDEX_INDEX_ON_COMPACTION_SETTING,
         IndexMetaData.INDEX_PARTITION_FUNCTION_SETTING,
         IndexMetaData.INDEX_PARTITION_FUNCTION_CLASS_SETTING,

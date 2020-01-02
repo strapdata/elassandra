@@ -30,7 +30,7 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.BytesRef;
 import org.elassandra.cluster.QueryManager;
 import org.elassandra.cluster.SchemaManager;
-import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.HostFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -342,8 +342,8 @@ public class DocumentMapper implements ToXContentFragment {
         return metadataMapper(TokenFieldMapper.class);
     }
 
-    public NodeFieldMapper nodeFieldMapper() {
-        return metadataMapper(NodeFieldMapper.class);
+    public HostFieldMapper hostFieldMapper() {
+        return metadataMapper(HostFieldMapper.class);
     }
 
     public SeqNoFieldMapper seqNoFieldMapper() {

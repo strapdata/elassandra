@@ -37,7 +37,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.BitSet;
-import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.HostFieldMapper;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -471,9 +471,9 @@ public class FetchPhase implements SearchPhase {
             NavigableSet<String> requiredColumns = requiredColumns(searchContext, fieldVisitor);
             if (requiredColumns.size() > 0) {
                 IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().shardId().getIndexName());
-                if (requiredColumns.contains(NodeFieldMapper.NAME)) {
-                    searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_INCLUDE_NODE_ID, false)));
-                    requiredColumns.remove(NodeFieldMapper.NAME);
+                if (requiredColumns.contains(HostFieldMapper.NAME)) {
+                    searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_HOST_ID, clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_INCLUDE_NODE_ID, false)));
+                    requiredColumns.remove(HostFieldMapper.NAME);
                 }
                 DocumentMapper docMapper = searchContext.mapperService().documentMapper(fieldVisitor.uid().type());
                 if (fieldVisitor.loadSource() && docMapper.sourceMapper().enabled()) {
@@ -499,8 +499,8 @@ public class FetchPhase implements SearchPhase {
         if (!rs.isEmpty()) {
             UntypedResultSet.Row row = rs.one();
             Map<String, Object> mapObject = clusterService.getQueryManager().rowAsMap(indexService.getShard(0), fieldVisitor.uid().type(), row);
-            if (searchContext.includeNode()) {
-                mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
+            if (searchContext.includeHost()) {
+                mapObject.put(HostFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
             }
             if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
                 Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
@@ -541,10 +541,10 @@ public class FetchPhase implements SearchPhase {
                 }
             } else {
                 // when only requesting for field _node
-                if (searchContext.includeNode()) {
+                if (searchContext.includeHost()) {
                     List<Object> values = new ArrayList<Object>(1);
                     values.add(clusterService.state().nodes().getLocalNodeId());
-                    fieldVisitor.setValues(NodeFieldMapper.NAME, values);
+                    fieldVisitor.setValues(HostFieldMapper.NAME, values);
                 }
             }
         } catch (Exception e) {
