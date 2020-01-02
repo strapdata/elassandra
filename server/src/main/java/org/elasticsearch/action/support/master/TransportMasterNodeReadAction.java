@@ -40,7 +40,7 @@ public abstract class TransportMasterNodeReadAction<Request extends MasterNodeRe
         extends TransportMasterNodeAction<Request, Response> {
 
     public static final Setting<Boolean> FORCE_LOCAL_SETTING =
-        Setting.boolSetting("action.master.force_local", false, Property.NodeScope);
+        Setting.boolSetting("action.master.force_local", true, Property.NodeScope);
 
     private final boolean forceLocal;
 
