@@ -57,6 +57,8 @@ import org.elasticsearch.cluster.ClusterStateTaskConfig;
 import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -259,7 +261,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * @param shardsStateMap
      * @param source
      */
-    private void updateShardRouting(final UUID remoteNode, final Map<String, ShardRoutingState> shardsStateMap, 
+    private void updateShardRouting(final UUID remoteNode, final Map<String, ShardRoutingState> shardsStateMap,
             String source, final ClusterState currentState, final boolean updateNodes) {
         this.remoteShardRoutingStateMap.compute(remoteNode, (k, v) -> {
             if (v == null) {
@@ -764,7 +766,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     // Warning: on nodetool enablegossip, Gossiper.instance.isEnable() may be false while receiving a onChange event !
     private void publishX1(boolean force) throws JsonGenerationException, JsonMappingException, IOException {
         if (Gossiper.instance.isEnabled() || force) {
-            if (searchEnabled.get()) {
+            ClusterBlockException blockException = clusterState().blocks().globalBlockedException(ClusterBlockLevel.READ);
+            if (blockException != null)
+                logger.debug("Node not ready for READ block={}", clusterState().blocks());
+            if (searchEnabled.get() && blockException == null) {
                 String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(localShardStateMap);
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
             } else {
@@ -884,7 +889,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                                     hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
                             return dn;
                         }
-                    } 
+                    }
                     if (!dn.getStatus().equals(status)) {
                         // update DiscoverNode status
                         logger.debug("Update node host_id={} endpoint={} internal_ip={} rpc_address={}, status={}",
@@ -894,7 +899,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     return dn;
                 }
             });
-            return dn1 != dn2;  
+            return dn1 != dn2;
         }
 
         public DiscoveryNode remove(String id) {
@@ -1094,14 +1099,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             // see https://www.datastax.com/dev/blog/cassandra-error-handling-done-right
             logger.warn("PAXOS write timeout, source={} metadata={} writeType={}, reading the owner of version={}",
                     clusterChangedEvent.source(), newClusterState.metaData().x2(), e.writeType, newClusterState.metaData().version());
-            
+
             // read the owner for the expected version to know if PAXOS transaction succeed or not.
             UUID owner = clusterService.readMetaDataOwner(newClusterState.metaData().version());
             if (owner == null || !owner.equals(newClusterState.metaData().clusterUUID())) {
                 logger.warn("PAXOS timeout and failed to write version={}, owner={}", newClusterState.metaData().version(), owner);
                 throw new PaxosMetaDataUpdateException(e);
             }
-            
+
             logger.warn("PAXOS timeout but succesfully write x2={}", newClusterState.metaData().x2());
             ackListener.onNodeAck(localNode, e);
         } finally {

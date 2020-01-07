@@ -387,19 +387,19 @@ public class ClusterService extends BaseClusterService {
         } else {
             elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
         }
-        selectVersionMetadataQuery = String.format(Locale.ROOT, 
-                "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ? LIMIT 1", 
+        selectVersionMetadataQuery = String.format(Locale.ROOT,
+                "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ? LIMIT 1",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        
-        selectOwnerMetadataQuery = String.format(Locale.ROOT, 
-                "SELECT owner FROM \"%s\".\"%s\" WHERE cluster_name = ? AND v = ?", 
+
+        selectOwnerMetadataQuery = String.format(Locale.ROOT,
+                "SELECT owner FROM \"%s\".\"%s\" WHERE cluster_name = ? AND v = ?",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        
-        initMetadataQuery = String.format(Locale.ROOT, 
+
+        initMetadataQuery = String.format(Locale.ROOT,
                 "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) WHERE cluster_name = ? AND v = ? IF version = null",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        
-        updateMetaDataQuery = String.format(Locale.ROOT, 
+
+        updateMetaDataQuery = String.format(Locale.ROOT,
                 "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) WHERE cluster_name= ? AND v = ? IF version = ?",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
@@ -801,7 +801,7 @@ public class ClusterService extends BaseClusterService {
                 Collection<Mutation> mutations = new ArrayList<>();
                 Collection<SchemaChange> events = new ArrayList<>();
                 writeMetadataToSchemaMutations(metadata, mutations, events);
-                
+
                 Multimap<CFMetaData, IndexMetaData> perTableIndices = ArrayListMultimap.create();
                 for(ObjectCursor<IndexMetaData> imd : metadata.indices().values()) {
                     for(ObjectCursor<MappingMetaData> mmd : imd.value.getMappings().values()) {
@@ -819,7 +819,7 @@ public class ClusterService extends BaseClusterService {
                     SchemaKeyspace.addTableToSchemaMutation(cfm2, false, builder);
                     mutations.add(builder.build());
                 }
-                
+
                 //do not announce schema migration because gossip not yet ready.
                 SchemaKeyspace.mergeSchema(mutations, getSchemaManager().getInhibitedSchemaListeners());
                 logger.warn("Elasticsearch metadata upgraded, source={}", source);
@@ -969,7 +969,7 @@ public class ClusterService extends BaseClusterService {
                         }
                     }
                 }
-                
+
                 // merge all IndexMetadata for single type to a multi-typed IndexMetaData (for backward compatibility with version 5)
                 MetaData.Builder metaDataBuilder = MetaData.builder(metaData);
                 if (indexMetaDataExtensions.size() > 0) {
@@ -986,10 +986,10 @@ public class ClusterService extends BaseClusterService {
                         metaDataBuilder.put(indexMetaDataBuilder, false);
                     }
                 }
-                
+
                 // 2nd building phase, add mapping from virtual index
                 metaDataBuilder = addVirtualIndexMappings(metaDataBuilder.build());
-                
+
                 final MetaData finalMetaData = metaDataBuilder.build();
                 logger.info("Elasticsearch metadata succesfully loaded from CQL table extensions metadata.version={}", finalMetaData.version());
                 logger.trace("metadata={}", finalMetaData);
@@ -1014,7 +1014,7 @@ public class ClusterService extends BaseClusterService {
                 if (!virtualIndex.getMappings().isEmpty()) {
                     IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(cursor.value);
                     for(ObjectCursor<MappingMetaData> mappingCursor : virtualIndex.getMappings().values()) {
-                        logger.debug("add mapping=[{}] from virtual index=[{}] to index=[{}]", 
+                        logger.debug("add mapping=[{}] from virtual index=[{}] to index=[{}]",
                                 mappingCursor.value.type(), virtualIndex.getIndex(), cursor.value.getIndex());
                         indexMetaDataBuilder.putMapping(mappingCursor.value);
                     }
@@ -1028,7 +1028,7 @@ public class ClusterService extends BaseClusterService {
         }
         return metaDataBuilder;
     }
-            
+
     // merge IndexMetaData from table extensions into the provided MetaData.
     public MetaData.Builder mergeWithTableExtensions(final MetaData.Builder metaDataBuilder)  {
         final ListMultimap<String, IndexMetaData> indexMetaDataExtensions = ArrayListMultimap.create();
@@ -1120,7 +1120,7 @@ public class ClusterService extends BaseClusterService {
         }
         return -1L;
     }
-    
+
     public static String getElasticsearchClusterName(Settings settings) {
         String clusterName = DatabaseDescriptor.getClusterName();
         String datacenterGroup = settings.get(ClusterService.SETTING_CLUSTER_DATACENTER_GROUP);
@@ -1158,13 +1158,13 @@ public class ClusterService extends BaseClusterService {
     Void createElasticAdminMetaTable() {
         try {
             String createTable = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( " +
-                    "    cluster_name text," + 
-                    "    v bigint," + 
-                    "    owner uuid," + 
-                    "    source text," + 
-                    "    ts timestamp," + 
-                    "    version bigint static," + 
-                    "    PRIMARY KEY (cluster_name, v)" + 
+                    "    cluster_name text," +
+                    "    v bigint," +
+                    "    owner uuid," +
+                    "    source text," +
+                    "    ts timestamp," +
+                    "    version bigint static," +
+                    "    PRIMARY KEY (cluster_name, v)" +
                     ") WITH CLUSTERING ORDER BY (v DESC);",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
             logger.info(createTable);
@@ -1180,12 +1180,12 @@ public class ClusterService extends BaseClusterService {
     Void insertFirstMetaRow(final MetaData metadata, String source) {
         try {
             logger.info(initMetadataQuery);
-            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(),
                     initMetadataQuery,
-                    UUID.fromString(StorageService.instance.getLocalHostId()), 
+                    UUID.fromString(StorageService.instance.getLocalHostId()),
                     metadata.version(),
                     source,
-                    DatabaseDescriptor.getClusterName(), 
+                    DatabaseDescriptor.getClusterName(),
                     metadata.version());
         } catch (Exception e) {
             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed insert first row into table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE), e);
@@ -1235,8 +1235,8 @@ public class ClusterService extends BaseClusterService {
                 currentRF = Integer.valueOf(replication.get(DatabaseDescriptor.getLocalDataCenter()).toString());
             }
             if (currentRF < 3) {
-                logger.warn("Keyspace [{}] replication factor {}={}, you should increase this replication factor " + 
-                            "to avoid possible issue if quorum cannot be reach to update the elasticsearch mapping.", 
+                logger.warn("Keyspace [{}] replication factor {}={}, you should increase this replication factor " +
+                            "to avoid possible issue if quorum cannot be reach to update the elasticsearch mapping.",
                             this.elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), currentRF);
             }
         }
@@ -1246,7 +1246,7 @@ public class ClusterService extends BaseClusterService {
         if (result.isEmpty()) {
             try {
                 retry(() -> createElasticAdminMetaTable(), String.format(Locale.ROOT, "create table %s.%s", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE));
-                
+
                 // insert first row if not exists
                 MetaData metaData = state().metaData();
                 String source = String.format(Locale.ROOT, "init table %s.%s", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
@@ -1284,13 +1284,13 @@ public class ClusterService extends BaseClusterService {
                 this.metadataSerialCL,
                 ClientState.forInternalCalls(),
                 updateMetaDataQuery,
-                new Object[] { 
-                        owner, 
+                new Object[] {
+                        owner,
                         newMetaData.version(),
                         source,
                         DatabaseDescriptor.getClusterName(),
                         newMetaData.version(),
-                        newMetaData.version() - 1 
+                        newMetaData.version() - 1
                 });
         if (applied) {
             logger.debug("PAXOS Succefully update metadata source={} nextMetaData={}", source, newMetaData.x2());
@@ -1300,7 +1300,7 @@ public class ClusterService extends BaseClusterService {
             throw new ConcurrentMetaDataUpdateException(owner, newMetaData.version());
         }
     }
-    
+
     /**
      * Read owner for a given version, with CL=SERIAL to commit any remaining uncommitted Paxos state before proceeding with the read.
      * Retry many times if a timeout occurs, because we have no other choice to recover from a PAXOS write timeout.
@@ -1315,7 +1315,7 @@ public class ClusterService extends BaseClusterService {
                         ClientState.forInternalCalls(),
                         selectOwnerMetadataQuery,
                         new Long(0),
-                        new Object[] { 
+                        new Object[] {
                                 DatabaseDescriptor.getClusterName(),
                                 version
                         });
@@ -1422,6 +1422,11 @@ public class ClusterService extends BaseClusterService {
     public void publishX2(final ClusterState clusterState) {
         if (this.discovery != null)
             this.discovery.publishX2(clusterState);
+    }
+
+    public void publishX1() throws IOException {
+        if (this.discovery != null)
+            this.discovery.publishX1();
     }
 
     @Override

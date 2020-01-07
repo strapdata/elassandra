@@ -34,6 +34,7 @@ import org.elasticsearch.gateway.TransportNodesListGatewayMetaState;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.threadpool.ThreadPool;
+import java.io.IOException;
 
 import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -73,7 +74,7 @@ public class CassandraGatewayService extends GatewayService {
 
                 // update the state to reflect
                 ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).build();
-                
+
                 // update routing table
                 RoutingTable routingTable = RoutingTable.build(clusterService, updatedState);
                 return ClusterState.builder(updatedState).routingTable(routingTable).build();
@@ -87,6 +88,11 @@ public class CassandraGatewayService extends GatewayService {
             @Override
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 logger.info("cassandra ring block released");
+                try {
+                    clusterService.publishX1();
+                } catch (IOException e) {
+                    logger.error("unexpected failure on X1 publishing during [{}]", source, e);
+                }
             }
         });
     }
