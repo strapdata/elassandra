@@ -58,6 +58,8 @@ import org.elasticsearch.cluster.ClusterStateTaskConfig;
 import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -866,7 +868,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     // Warning: on nodetool enablegossip, Gossiper.instance.isEnable() may be false while receiving a onChange event !
     private void publishX1(boolean force) throws JsonGenerationException, JsonMappingException, IOException {
         if (Gossiper.instance.isEnabled() || force) {
-            if (searchEnabled.get()) {
+            ClusterBlockException blockException = clusterState().blocks().globalBlockedException(ClusterBlockLevel.READ);
+            if (blockException != null)
+                logger.debug("Node not ready for READ block={}", clusterState().blocks());
+            if (searchEnabled.get() && blockException == null) {
                 Map<String, ShardRoutingState> localShardStateMap = new HashMap<>();
                 if (clusterService.getIndicesService() != null) {
                     for(IndexService indexService : clusterService.getIndicesService()) {

@@ -1358,6 +1358,11 @@ public class ClusterService extends BaseClusterService {
             this.discovery.publishX2(clusterState);
     }
 
+    public void publishX1() throws IOException {
+        if (this.discovery != null)
+            this.discovery.publishX1();
+    }
+
     @Override
     public DiscoveryNode localNode() {
         return (this.discovery != null) ? this.discovery.localNode() : this.getClusterApplierService().state().nodes().getLocalNode();
