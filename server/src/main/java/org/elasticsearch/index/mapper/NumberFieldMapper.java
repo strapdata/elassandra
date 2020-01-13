@@ -1014,7 +1014,7 @@ public class NumberFieldMapper extends FieldMapper {
 
         @Override
         public Object cqlValue(Object value) {
-            return type.cqlValue(value);
+            return type.cqlValue(type.parse(value, true));
         }
 
         @Override
@@ -1142,11 +1142,11 @@ public class NumberFieldMapper extends FieldMapper {
         if (value == null) {
             return;
         }
-        
+
         if (numericValue == null) {
             numericValue = fieldType().type.parse(value, coerce.value());
         }
-        
+
         String fieldName = keyName.orElse(fieldType().name());
 
         if (includeInAll) {

@@ -47,12 +47,7 @@ import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.index.mapper.CompletionFieldMapper;
-import org.elasticsearch.index.mapper.FieldMapper;
-import org.elasticsearch.index.mapper.Mapper;
-import org.elasticsearch.index.mapper.MetadataFieldMapper;
-import org.elasticsearch.index.mapper.ObjectMapper;
-import org.elasticsearch.index.mapper.RangeFieldMapper;
+import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.RangeFieldMapper.Range;
 import org.elasticsearch.index.query.RangeQueryBuilder;
 
@@ -252,7 +247,7 @@ public class Serializer {
             return ((Long)value).doubleValue();
         return Double.parseDouble(value.toString());
     }
-    
+
     public static Object deserialize(AbstractType<?> type, ByteBuffer bb) throws CharacterCodingException {
         return deserialize(type, bb, null);
     }
