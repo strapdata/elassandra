@@ -48,12 +48,7 @@ import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.index.mapper.CompletionFieldMapper;
-import org.elasticsearch.index.mapper.FieldMapper;
-import org.elasticsearch.index.mapper.Mapper;
-import org.elasticsearch.index.mapper.MetadataFieldMapper;
-import org.elasticsearch.index.mapper.ObjectMapper;
-import org.elasticsearch.index.mapper.RangeFieldMapper;
+import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.RangeFieldMapper.Range;
 import org.elasticsearch.index.query.RangeQueryBuilder;
 

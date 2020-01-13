@@ -1054,7 +1054,7 @@ public class NumberFieldMapper extends FieldMapper {
 
         @Override
         public Object cqlValue(Object value) {
-            return type.cqlValue(value);
+            return type.cqlValue(type.parse(value, true));
         }
 
         @Override
