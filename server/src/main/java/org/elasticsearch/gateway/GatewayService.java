@@ -123,8 +123,6 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
             // TODO: change me once the minimum_master_nodes is changed too
             recoverAfterMasterNodes = settings.getAsInt("discovery.zen.minimum_master_nodes", -1);
         }
-
-        clusterService.addLowPriorityApplier(metaState);
     }
 
     public Gateway gateway() {
