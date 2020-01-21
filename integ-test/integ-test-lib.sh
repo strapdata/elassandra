@@ -38,9 +38,9 @@ start_node() {
   IDX=$1
   ccm "node$IDX" start
 
-  sleep 35
+  sleep 60
 
-  until curl --retry 20 --retry-delay 5 "http://127.0.0.${IDX}:9200/_search"
+  until curl --retry 20 --retry-delay 5 "http://127.0.0.${IDX}:9200/_search" 2>/dev/null
   do
     sleep 5
   done
@@ -69,7 +69,7 @@ remove_node() {
 }
 
 function insert_doc() {
-  for i in {1..100}; do curl -H 'Content-Type: application/json' -XPOST "http://localhost:9200/$1/doc" -d'{"foo":"bar"}'; done
+  for i in {1..100}; do curl -H 'Content-Type: application/json' -XPOST "http://localhost:9200/$1/doc" -d'{"foo":"bar"}' 2>/dev/null; done
   sleep 2 # refresh wait
 }
 
