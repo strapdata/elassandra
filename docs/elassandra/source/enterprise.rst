@@ -1353,16 +1353,21 @@ Kibana needs a dedicated kibana account to manage the kibana configuration, with
     kibana |   kibana | <keyspace _kibana> |     SELECT
     kibana |   kibana | <keyspace _kibana> |     MODIFY
 
-Add cluster monitoring the access rights to the *kibana* user, and refresh the privileges cache.
+Add the cluster monitoring and kibana indices access rights to the *kibana* user, and refresh the privileges cache.
 
 .. code::
 
    INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','cluster:monitor/.*','.*');
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','indices:.*','\.kibana');
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','indices:.*','\.kibana_.*');
    SELECT * FROM elastic_admin.privileges;
-   
-    role   | actions            | indices | fields | query
-   --------+--------------------+---------+--------+-------
-    kibana | cluster:monitor/.* |      .* |   null |  null
+
+    role   | actions            | indices     | fields | query
+   --------+--------------------+-------------+--------+-------
+    kibana | cluster:monitor/.* |      .*     |   null |  null
+    kibana |         indices:.* |    \.kibana |   null |  null
+    kibana |         indices:.* | \.kibana_.* |   null |  null
+
 
 Finally, Kibana user accounts must have :
 
