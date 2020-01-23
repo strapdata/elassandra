@@ -1,3 +1,8 @@
+6.8.4.1 - 2020-01-23
+  * Fix #323 Elassandra Mapping coercing issue with dynamic template
+  * Add documentation for TimeUUIDPartitionFunction
+  * Improvement for Gossip X1 publication
+
 6.8.4.0 - 2020-01-02
   * Upgrade to Elasticsearch 6.8.4
   * Upgrade to Cassandra 3.11.5.1
