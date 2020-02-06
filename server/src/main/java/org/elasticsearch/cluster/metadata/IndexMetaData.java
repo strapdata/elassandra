@@ -333,7 +333,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public static final Setting<Boolean> INDEX_SETTING_VIRTUAL_SETTING =
             Setting.boolSetting(SETTING_VIRTUAL, false, Property.Final, Property.IndexScope);
 
-    
+
     public static final String SETTING_TABLE_OPTIONS = "index.table_options";
     public static final Setting<String> INDEX_SETTING_TABLE_OPTIONS_SETTING =
             Setting.simpleString(SETTING_TABLE_OPTIONS, Property.Final, Property.IndexScope);
@@ -597,7 +597,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     }
 
     public String keyspace() {
-        return getSettings().get(IndexMetaData.SETTING_KEYSPACE, ClusterService.indexToKsName(index.getName()));
+        // this code is less smart than getSettings().get(IndexMetaData.SETTING_KEYSPACE, ClusterService.indexToKsName(index.getName()));
+        // but in this way, we avoid useless processing and time consuming 'indexToKsName' method call
+        // this make the difference when there are a lot of indexes.
+        String keyspace = getSettings().get(IndexMetaData.SETTING_KEYSPACE);
+        if (keyspace == null) {
+            keyspace = ClusterService.indexToKsName(index.getName());
+        }
+
+        return keyspace;
     }
 
     public String table() {
@@ -620,7 +628,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public String virtualIndex() {
         return getSettings().get(IndexMetaData.SETTING_VIRTUAL_INDEX);
     }
-    
+
     public boolean hasVirtualIndex() {
         return virtualIndex() != null;
     }
@@ -628,7 +636,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public boolean isVirtual() {
         return getSettings().getAsBoolean(IndexMetaData.SETTING_VIRTUAL, false);
     }
-    
+
     /**
      * name = partition function name.
      * pattern = MessageFormat (@see MessageFormat)

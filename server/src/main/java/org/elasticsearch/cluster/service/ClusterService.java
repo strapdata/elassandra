@@ -25,9 +25,7 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -39,7 +37,6 @@ import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.KeyspaceNotDefinedException;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.marshal.AbstractType;
@@ -134,7 +131,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -143,11 +139,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
@@ -590,8 +585,10 @@ public class ClusterService extends BaseClusterService {
         return SchemaManager.buildIndexName(cfName);
     }
 
+    private static final Pattern INDEX_TO_NAME_PATTERN = Pattern.compile("\\.|\\-");
+
     public static String indexToKsName(String index) {
-        return index.replaceAll("\\.", "_").replaceAll("\\-", "_");
+        return INDEX_TO_NAME_PATTERN.matcher(index).replaceAll("_");
     }
 
     public static int replicationFactor(String keyspace) {
