@@ -134,6 +134,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
@@ -576,8 +577,10 @@ public class ClusterService extends BaseClusterService {
         return SchemaManager.buildIndexName(cfName);
     }
 
+    private static final Pattern INDEX_TO_NAME_PATTERN = Pattern.compile("\\.|\\-");
+
     public static String indexToKsName(String index) {
-        return index.replaceAll("\\.", "_").replaceAll("\\-", "_");
+        return INDEX_TO_NAME_PATTERN.matcher(index).replaceAll("_");
     }
 
     public static int replicationFactor(String keyspace) {

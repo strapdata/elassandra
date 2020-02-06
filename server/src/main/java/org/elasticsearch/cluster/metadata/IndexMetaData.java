@@ -577,7 +577,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     }
 
     public String keyspace() {
-        return getSettings().get(IndexMetaData.SETTING_KEYSPACE, ClusterService.indexToKsName(index.getName()));
+        // this code is less smart than getSettings().get(IndexMetaData.SETTING_KEYSPACE, ClusterService.indexToKsName(index.getName()));
+        // but in this way, we avoid useless processing and time consuming 'indexToKsName' method call
+        // this make the difference when there are a lot of indexes.
+        String keyspace = getSettings().get(IndexMetaData.SETTING_KEYSPACE);
+        if (keyspace == null) {
+            keyspace = ClusterService.indexToKsName(index.getName());
+        }
+
+        return keyspace;
     }
 
     public String table() {
