@@ -9,6 +9,22 @@
   * Fix #315 missing subfield when indexing a doc with 2 or more new subfields
   * Known issue on geoshapes
 
+6.2.3.24 - 2020-01-21
+  * Fix #323 Elassandra Mapping coercing issue with dynamic template
+  * Add documentation for TimeUUIDPartitionFunction
+  * Improvement for Gossip X1 publication
+
+6.2.3.23 - 2019-12-28
+  * Fix #315 missing subfield when indexing a doc with 2 or more new subfields
+  * Add support for index name longer than 48 characters
+
+6.2.3.22 - 2019-11-28
+  * Update Apache Cassandra version from 3.11.4 to 3.11.5
+  * Fix DecodeSmile command issue
+  * Fix possible gossip update race condition on bootstrap
+  * Add automated integration tests based on ECM (CCM for Elassandra)
+  * Improve unit testing
+
 6.2.3.21 - 2018-10-16
   * Remove elastic_admin RF adjustment
 

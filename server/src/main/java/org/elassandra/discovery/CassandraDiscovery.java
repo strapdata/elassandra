@@ -106,6 +106,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.cassandra.service.GZipStringCompressor.*;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
 
@@ -150,6 +151,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * This allows to gracefully shutdown or start the node for maintenance like an offline repair or rebuild_index.
      */
     private final AtomicBoolean searchEnabled = new AtomicBoolean(false);
+
+    /**
+     * Compress the gossip application state X1
+     */
+    private final boolean gzip = Boolean.parseBoolean(System.getProperty(ClusterService.SETTING_SYSTEM_COMPRESS_INDEXES_IN_GOSSIP, "false"));
 
     /**
      * If autoEnableSearch=true, search is automatically enabled when the node becomes ready to operate, otherwise, searchEnabled should be manually set to true.
@@ -294,7 +300,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 return;
 
             UUID hostId = UUID.fromString(epState.getApplicationState(ApplicationState.HOST_ID).value);
-            String x1 = epState.getApplicationState(ApplicationState.X1) == null ? null : epState.getApplicationState(ApplicationState.X1).value;
+            String x1 = null;
+            try {
+                x1 = epState.getApplicationState(ApplicationState.X1) == null ? null : uncompressIfGZipped(epState.getApplicationState(ApplicationState.X1).value);
+            } catch (IOException e) {
+                logger.warn("Decompression of gossip application state X1 failed, use the value as it : {}", e.getMessage(), e);
+                x1 = epState.getApplicationState(ApplicationState.X1).value;
+            }
             update(hostId, source, endpoint, getInternalIp(epState), getRpcAddress(epState), discoveryNodeStatus(epState), x1,  allowClusterStateUpdate);
         }
 
@@ -610,7 +622,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
                 if (x1 != null) {
                     try {
-                        Map<String, ShardRoutingState> newShardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                        Map<String, ShardRoutingState> newShardsStateMap = jsonMapper.readValue(uncompressIfGZipped(x1.value), indexShardStateTypeReference);
                         Map<String, ShardRoutingState> oldShardsStateMap = this.remoteShardRoutingStateMap.put(hostUuid, newShardsStateMap);
                         if (!newShardsStateMap.equals(oldShardsStateMap)) {
                             updatedNode = true; // force update if X1 changed
@@ -886,9 +898,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     }
                 }
                 String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(localShardStateMap);
-                Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
+                logger.debug("Compress X1 = {}", gzip);
+                Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(gzip ? compress(newValue) : newValue));
             } else {
                 // publish an empty map, so other nodes will see local shards UNASSIGNED.
+                // empty doesn't have to be GZipped
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter("{}"));
             }
         } else {
