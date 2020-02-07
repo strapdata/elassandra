@@ -215,6 +215,10 @@ The routing table now distributes search request on 2 Elassandra nodes covering 
 
 Internally, each node broadcasts its local shard status to the gossip application state X1 ( "twitter":STARTED ) and its current metadata UUID/version to the application state X2.
 
+.. note::
+   The payload of the gossip application state X1 maybe huge according to the number of indexes. If this field contains more than 64KB of data, the gossip will fail between nodes.
+   That's why we introduce the *es.compress_x1* system property to compress the payload (default value is **false**). Before enabling this option, be sure that all your cluster nodes are in version 6.2.3.25 (or higher) or 6.8.4.2 (or higher)
+
 .. code::
 
     nodetool gossipinfo

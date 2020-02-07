@@ -18,7 +18,6 @@ package org.elassandra.discovery;
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
 import com.google.common.net.InetAddresses;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.Mutation;
@@ -26,11 +25,7 @@ import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.UnavailableException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
-import org.apache.cassandra.gms.ApplicationState;
-import org.apache.cassandra.gms.EndpointState;
-import org.apache.cassandra.gms.Gossiper;
-import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
-import org.apache.cassandra.gms.VersionedValue;
+import org.apache.cassandra.gms.*;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.Event;
@@ -49,14 +44,8 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
-import org.elasticsearch.cluster.ClusterChangedEvent;
-import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateListener;
-import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.*;
 import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
-import org.elasticsearch.cluster.ClusterStateTaskExecutor;
-import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
@@ -88,23 +77,10 @@ import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
@@ -113,6 +89,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.cassandra.service.GZipStringCompressor.*;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
 
@@ -154,6 +131,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * This allows to gracefully shutdown or start the node for maintenance like an offline repair or rebuild_index.
      */
     private final AtomicBoolean searchEnabled = new AtomicBoolean(false);
+
+    /**
+     * Compress the gossip application state X1
+     */
+    private final boolean gzip = Boolean.parseBoolean(System.getProperty(ClusterService.SETTING_SYSTEM_COMPRESS_INDEXES_IN_GOSSIP, "false"));
 
     /**
      * If autoEnableSearch=true, search is automatically enabled when the node becomes ready to operate, otherwise, searchEnabled should be manually set to true.
@@ -408,7 +390,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
                         if (!this.localNode().getId().equals(hostId)) {
                             try {
-                                Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                                Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(uncompressIfGZipped(x1.value), indexShardStateTypeReference);
                                 updateShardRouting(Gossiper.instance.getHostId(endpoint), shardsStateMap, "X1-"+endpoint, clusterState(), updateNodes);
                             } catch (IOException e) {
                                 logger.error("Failed to parse X1 for node [{}]", hostId);
@@ -461,7 +443,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
                 if (x1 != null) {
                     try {
-                        Map<String, ShardRoutingState> newShardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                        Map<String, ShardRoutingState> newShardsStateMap = jsonMapper.readValue(uncompressIfGZipped(x1.value), indexShardStateTypeReference);
                         Map<String, ShardRoutingState> oldShardStateMap = this.remoteShardRoutingStateMap.put(hostUuid, newShardsStateMap);
                         if (newShardsStateMap != null && !newShardsStateMap.equals(oldShardStateMap))
                             updatedNode = true;
@@ -547,9 +529,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     boolean updateNodes = clusterGroup.update(epState, hostId, endpoint, getInternalIp(epState), getRpcAddress(epState));
                     // update the remoteShardRoutingStateMap to build ES routing table for joined-normal nodes only.
                     if (clusterGroup.contains(hostId)) {
-                        final Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(versionValue.value, indexShardStateTypeReference);
+                        final Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(uncompressIfGZipped(versionValue.value), indexShardStateTypeReference);
                         if (logger.isTraceEnabled())
-                            logger.trace("Endpoint={} X1={} => updating routing table with shardsStateMap={}", endpoint, versionValue.value, shardsStateMap);
+                            logger.trace("Endpoint={} X1={} => updating routing table with shardsStateMap={}", endpoint, uncompressIfGZipped(versionValue.value), shardsStateMap);
                         updateShardRouting(UUID.fromString(hostId), shardsStateMap, "X1-" + endpoint, clusterState(), updateNodes);
                     }
                 } catch (Exception e) {
@@ -771,9 +753,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 logger.debug("Node not ready for READ block={}", clusterState().blocks());
             if (searchEnabled.get() && blockException == null) {
                 String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(localShardStateMap);
-                Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
+                logger.debug("Compress X1 = {}", gzip);
+                Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(gzip ? compress(newValue) : newValue));
             } else {
                 // publish an empty map, so other nodes will see local shards UNASSIGNED.
+                // empty doesn't have to be GZipped
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter("{}"));
             }
         } else {

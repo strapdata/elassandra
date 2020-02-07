@@ -172,6 +172,8 @@ public class ClusterService extends BaseClusterService {
     public static final String TABLE_PREFIX = "";
     private static final int CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS = Integer.getInteger(SYSTEM_PREFIX + "create_elastic_admin_retry_attempts", 5);
 
+    public static final String COMPRESS_INDEXES_IN_GOSSIP = "compress_x1";
+
     /**
      * Dynamic mapping update timeout
      */
@@ -258,6 +260,7 @@ public class ClusterService extends BaseClusterService {
     public static final String INDEX_OPAQUE_STORAGE = "index_opaque_storage";
 
     // system property settings
+    public static final String SETTING_SYSTEM_COMPRESS_INDEXES_IN_GOSSIP = SYSTEM_PREFIX+COMPRESS_INDEXES_IN_GOSSIP;
     public static final String SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT = SYSTEM_PREFIX+MAPPING_UPDATE_TIMEOUT;
     public static final String SETTING_SYSTEM_SECONDARY_INDEX_CLASS = SYSTEM_PREFIX+SECONDARY_INDEX_CLASS;
     public static final String SETTING_SYSTEM_SEARCH_STRATEGY_CLASS = SYSTEM_PREFIX+SEARCH_STRATEGY_CLASS;
