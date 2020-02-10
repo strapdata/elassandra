@@ -166,6 +166,13 @@ In the following example, there are two top level aggregations named *sales_per_
    
    (5 rows)
 
+.. note::
+
+   If the aggregation type returns more than one value like *stats*, you have to request json output in *es_options*
+
+   ex :  select * from twitter2.doc where es_query='{"size":0, "aggs":{{"sales":{"stats":{"field":"price"}}}}}' and es_options='indices=twitter2;json=true'
+
+
 Distributed Elasticsearch aggregation with Apache Spark
 .......................................................
 
