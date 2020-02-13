@@ -262,7 +262,7 @@ A partition function must implements the java interface **org.elassandra.index.P
 
 * **StringFormatPartitionFunction** (the default) based on the JDK function `String.format(Locale locale, <parttern>,<arg1>,...) <https://docs.oracle.com/javase/8/docs/api/java/lang/String.html>`_.
 * **MessageFormatPartitionFunction** based on the JDK function `MessageFormat.format(<parttern>,<arg1>,...) <https://docs.oracle.com/javase/8/docs/api/java/text/MessageFormat.html#format-java.lang.String-java.lang.Object...->`_.
-* **TimeUUIDPartitionFunction** based on the JDK function `MessageFormat.format(<parttern>,<arg1>,...) <https://docs.oracle.com/javase/8/docs/api/java/text/MessageFormat.html#format-java.lang.String-java.lang.Object...->`_.
+* **TimeUUIDPartitionFunction** based on the JDK function `String.format(Locale locale, <parttern>,<arg1>,...) <https://docs.oracle.com/javase/8/docs/api/java/lang/String.html>`_ (A TimeUUID argument will be converted as java.lang.Date).
 
 Index partition function are stored in a map, so a given index function is executed exactly once for all mapped index.
 For example, the **toYearIndex** function generates the target index **logs_<year>** depending on the value of the **date_field** for each document (or row).
