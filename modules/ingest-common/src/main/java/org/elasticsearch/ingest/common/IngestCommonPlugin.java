@@ -19,6 +19,8 @@
 
 package org.elasticsearch.ingest.common;
 
+import org.elassandra.ingest.common.Base64Processor;
+import org.elassandra.ingest.common.TimeuuidProcessor;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -87,6 +89,8 @@ public class IngestCommonPlugin extends Plugin implements ActionPlugin, IngestPl
         processors.put(PipelineProcessor.TYPE, new PipelineProcessor.Factory(parameters.ingestService));
         processors.put(DissectProcessor.TYPE, new DissectProcessor.Factory());
         processors.put(DropProcessor.TYPE, new DropProcessor.Factory());
+        processors.put(TimeuuidProcessor.TYPE, new TimeuuidProcessor.Factory(parameters.scriptService));
+        processors.put(Base64Processor.TYPE, new Base64Processor.Factory(parameters.scriptService));
         return Collections.unmodifiableMap(processors);
     }
 
