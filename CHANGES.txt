@@ -1,6 +1,7 @@
-6.2.3.25 - 2020-02-xx
+6.2.3.25 - 2020-02-17
   * Optimize the IndexMetaData.keyspace method
-  * Allow compression for gossip state X1
+  * Fix TimeUUID & Base64 Ingest processor declaration
+  * Compression of X1 application state to increase the number of created indices
 
 6.2.3.24 - 2020-01-21
   * Fix #323 Elassandra Mapping coercing issue with dynamic template
