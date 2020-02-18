@@ -49,6 +49,17 @@ For Elasticsearch users, elassandra provides useful features :
   
 ## Upgrade Instructions
 
+
+#### Elassandra 6.8.4.2+
+
+Since version 6.8.4.2, the gossip X1 application state can be compressed using a system property. Enabling this settings allows the creation of a lot of virtual indices.
+Before enabling this setting, upgrade all the 6.8.4.x nodes to the 6.8.4.2 (or higher). Once all the nodes are in 6.8.4.2, they are able to decompress the application state even if the settings isn't yet configured locally.
+
+#### Elassandra 6.2.3.25+
+
+Since version 6.2.3.25, the gossip X1 application state can be compressed using a system property. Enabling this settings allows the creation of a lot of virtual indices.
+Before enabling this setting, upgrade all the 6.2.3.x nodes to the 6.2.3.25 (or higher). Once all the nodes are in 6.2.3.25, they are able to decompress the application state even if the settings isn't yet configured locally.
+
 #### Elassandra 6.2.3.21+
 
 Before version 6.2.3.21, the Cassandra replication factor for the **elasic_admin** keyspace (and elastic_admin_[datacenter.group]) was automatically adjusted to the 
