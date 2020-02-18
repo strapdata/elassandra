@@ -1,24 +1,28 @@
 package org.elassandra.cli;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.dataformat.smile.SmileFactory;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.utils.Hex;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cli.LoggingAwareCommand;
 import org.elasticsearch.cli.Terminal;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.common.xcontent.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.elasticsearch.cluster.metadata.MetaData.CONTEXT_CASSANDRA_PARAM;
 
 public class DecodeSmileCommand extends LoggingAwareCommand {
 
-    private final JsonFactory jsonFactory = new JsonFactory();
-    private final SmileFactory smileFactory = new SmileFactory();
+    private static final Logger logger = LogManager.getLogger(DecodeSmileCommand.class);
 
     private final OptionSpec<String> smileOption = parser.acceptsAll(Arrays.asList("s", "smile"), "smile to decode (in hex format)").withRequiredArg().required().ofType(String.class);
 
@@ -37,22 +41,26 @@ public class DecodeSmileCommand extends LoggingAwareCommand {
 
     private String convertToJson(String smile) {
         final byte[] bytes = Hex.hexToBytes(smile.startsWith("0x") ? smile.substring(2) : smile);
-        return new String(convertToJson(bytes));
+        return convertToJson(bytes);
     }
 
-    public final byte[] convertToJson(byte[] bytes) {
-        final ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    public final String convertToJson(byte[] bytes) {
+        try{
+            IndexMetaData indexMetaData = IndexMetaData.FORMAT.loadLatestState(logger, new NamedXContentRegistry(Collections.emptyList()), bytes);
 
-        try(JsonParser sp = smileFactory.createParser(bytes);
-            JsonGenerator jg = jsonFactory.createGenerator(bos).useDefaultPrettyPrinter()) {
+            XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
+            builder.prettyPrint();
+            builder.startObject();
 
-            while (sp.nextToken() != null) {
-                jg.copyCurrentEvent(sp);
-            }
+            Map<String, String> params = new HashMap<>(1);
+            params.put(CONTEXT_CASSANDRA_PARAM, "true");
+            IndexMetaData.Builder.toXContent(indexMetaData, builder, new ToXContent.MapParams(params));
+            builder.endObject();
 
+            builder.flush();
+            return ((ByteArrayOutputStream)builder.getOutputStream()).toString("UTF-8");
         } catch (IOException e) {
             throw new InvalidRequestException(String.format("Error while converting smile to json : %s", e.getMessage()));
         }
-        return bos.toByteArray();
     }
 }
