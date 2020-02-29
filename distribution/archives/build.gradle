@@ -276,7 +276,7 @@ configure(subprojects.findAll { it.name == 'integ-test-zip' }) {
 /*****************************************************************************
  *                              Maven config                                 *
  *****************************************************************************/
-configure(subprojects.findAll { it.name.contains('zip') }) {
+configure(subprojects.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.name) }) {
   // only zip distributions go to maven
   BuildPlugin.configurePomGeneration(project)
   apply plugin: 'nebula.info-scm'
@@ -285,11 +285,11 @@ configure(subprojects.findAll { it.name.contains('zip') }) {
 
   // note: the group must be correct before applying the nexus plugin, or
   // it will capture the wrong value...
-  String subgroup = project.name == 'integ-test-zip' ? 'integ-test-zip' : 'zip'
+  String subgroup = project.name
   project.group = "com.strapdata.elasticsearch.distribution.${subgroup}"
 
   // make the pom file name use elasticsearch instead of the project name
-  archivesBaseName = "elasticsearch${it.name.contains('oss') ? '-oss' : ''}"
+  archivesBaseName = "elassandra"
 
   publishing {
     publications {
