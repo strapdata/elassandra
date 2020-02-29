@@ -48,8 +48,10 @@ For Elasticsearch users, elassandra provides useful features :
 
 #### Elassandra 6.2.3.25+
 
-Since version 6.2.3.25, the gossip X1 application state can be compressed using a system property. Enabling this settings allows the creation of a lot of virtual indices.
-Before enabling this setting, upgrade all the node to the 6.2.3.25 (or higher). Once all the nodes are in 6.2.3.25, they are able to decompress the application state even if the settings isn't yet configured locally.
+Elassandra use the Cassandra GOSSIP protocol to manage the Elasticsearch routing table and Elassandra 6.2.3.25+ add support for compression of
+the X1 application state to increase the maxmimum number of Elasticsearch indices. For backward compatibility, the compression is disabled by default,
+but once all your nodes are upgraded into version 6.2.3.25+, you should enable the X1 compression by adding **-Des.compress_x1=true** in your **conf/jvm.options** and rolling restart all nodes.
+Nodes running version 6.2.3.25+ are able to read compressed and not compressed X1.
 
 #### Elassandra 6.2.3.21+
 
