@@ -1,3 +1,7 @@
+6.8.4.3 - 2020-02-29
+  * Switch to cassandra 3.11.5.3
+  * Improve gradle publication
+
 6.8.4.2 - 2020-02-17
   * Fix TimeUUID & Base64 Ingest processor declaration
   * Compression of X1 application state to increase the number of created indices
