@@ -1,3 +1,7 @@
+6.2.3.26 - 2020-02-29
+  * Switch to cassandra 3.11.5.3
+  * Improve gradle publication
+
 6.2.3.25 - 2020-02-17
   * Optimize the IndexMetaData.keyspace method
   * Fix TimeUUID & Base64 Ingest processor declaration
