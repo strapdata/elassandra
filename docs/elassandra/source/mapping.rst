@@ -62,7 +62,10 @@ Below is the mapping from Elasticsearch field basic types to CQL3 types :
 (1) Geo shapes require _source to be enabled to store the original JSON document (default is disabled).
 (2) Existing Cassandra text columns containing a geohash string can be mapped to an Elasticsearch geo_point.
 
-Theses parameters below control the Cassandra mapping.
+CQL mapper extensions
+---------------------
+
+Elassandra adds some Elasticsearch mapper extensions in order to map Elasticsearch field to Cassandra:
 
 .. cssclass:: table-bordered
 
@@ -193,10 +196,6 @@ Meta-Fields
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
 * ``_host`` is an optional meta-field introduced by Elassandra, valued with the Cassandra host id, allowing to check the datacenter consistency.
 
-CQL mapper extensions
----------------------
-
-Elassandra introduce some CQL mapper extentions in order to map Elasticsearch field to a column in a Cassandra table.
 
 Mapping change with zero downtime
 ---------------------------------

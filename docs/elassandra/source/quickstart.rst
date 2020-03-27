@@ -11,7 +11,7 @@ Start a docker-based Elassandra cluster using docker-compose file **ci/docker-co
     version: '2.4'
     services:
       seed_node:
-        image: "docker.io/strapdata/elassandra-dev:6.8.4.0"
+        image: "docker.io/strapdata/elassandra:6.8.4.3"
         environment:
           - "JVM_OPTS=-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
           - "MAX_HEAP_SIZE=1200m"
@@ -27,7 +27,7 @@ Start a docker-based Elassandra cluster using docker-compose file **ci/docker-co
           - "9042:9042"
           - "9200:9200"
       node:
-        image: "docker.io/strapdata/elassandra-dev:6.8.4.0"
+        image: "docker.io/strapdata/elassandra:6.8.4.3"
         environment:
           - "JVM_OPTS=-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
           - "MAX_HEAP_SIZE=1200m"
