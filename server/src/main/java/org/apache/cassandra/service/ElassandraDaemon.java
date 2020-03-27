@@ -15,7 +15,6 @@
  */
 package org.apache.cassandra.service;
 
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 
@@ -28,8 +27,6 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
-import org.elassandra.NoPersistedMetaDataException;
-import org.elassandra.discovery.CassandraDiscovery;
 import org.elassandra.env.EnvironmentLoader;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ExceptionsHelper;
@@ -40,14 +37,10 @@ import org.elasticsearch.bootstrap.BootstrapChecks;
 import org.elasticsearch.bootstrap.BootstrapContext;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.NamedDiff;
-import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.spi.Message;
-import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
@@ -67,17 +60,14 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -240,7 +230,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void userKeyspaceInitialized() {
         logger.debug("User keyspaces initialized");
-        if (node != null && SystemKeyspace.bootstrapComplete()) {
+        if (node != null && (SystemKeyspace.bootstrapComplete() || DatabaseDescriptor.getAutoSnapshot() == false)) {
             try {
                 this.hasMetadata = this.node.clusterService().hasMetaDataTable();
                 if (this.hasMetadata) {
