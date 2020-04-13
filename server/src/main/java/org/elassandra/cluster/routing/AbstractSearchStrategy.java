@@ -214,7 +214,7 @@ public abstract class AbstractSearchStrategy {
                 l.add(new Range<Token>( (left == 0) ? TOKEN_MIN : tokens.get(left -1), tokens.get(right - 1)));
                 i = right;
             }
-            logger.trace("tokens={} bitset={} ranges={}", tokens, bs, l);
+            logger.trace("bitset={} tokens={} ranges={}", bs, tokens, l);
             return  l;
         }
 
