@@ -42,6 +42,10 @@ import java.util.function.BiFunction;
  */
 public class RandomSearchStrategy extends AbstractSearchStrategy {
     
+    public void sortNodes(DiscoveryNode pivotNode, List<DiscoveryNode> greenNodes, Random random) {
+        Collections.shuffle(greenNodes, random);
+    }
+    
     public class RandomRouter extends Router {
         Random rnd = new Random();
         
@@ -66,34 +70,42 @@ public class RandomSearchStrategy extends AbstractSearchStrategy {
             if (pivotNode != null) {
                 BitSet pivotBitset = this.greenShards.get(pivotNode);
                 selectedShards.put(pivotNode, pivotBitset);
+                logger.trace("pivotBitset={}", pivotBitset);
                 
-                List<DiscoveryNode> randomAvailableNodes = Lists.newArrayList(greenShards.keySet());
-                randomAvailableNodes.remove(pivotNode);
-                Collections.shuffle(randomAvailableNodes, rnd);
-                
+                List<DiscoveryNode> greenNodes = Lists.newArrayList(greenShards.keySet());
+                greenNodes.remove(pivotNode);
+                sortNodes(pivotNode, greenNodes, rnd);
                 
                 BitSet coverBitmap = (BitSet)pivotBitset.clone();
                 int i = 0;
                 while (coverBitmap.cardinality() != tokens.size() && i < tokens.size()) {
                     int x = coverBitmap.nextClearBit(i);
                     DiscoveryNode choice = null;
-                    for(Iterator<DiscoveryNode> it = randomAvailableNodes.iterator(); it.hasNext(); ) {
-                        DiscoveryNode node = it.next();
-                        if (this.greenShards.get(node).get(x)) {
-                            // choose the first (could choose the wider token_range, or the one having the less dropped mutations)
-                            if (choice == null)
-                                choice = node;
-                            it.remove();
+                    BitSet choiceBitset = null;
+                    for(DiscoveryNode node : greenNodes) {
+                        BitSet bs = this.greenShards.get(node);
+                        if (bs.get(x)) {
+                            choice = node;
+                            choiceBitset = bs;
+                            break;
                         }
                     }
                     if (choice != null) {
-                        BitSet choiceBitset = this.greenShards.get(choice);
+                        greenNodes.remove(choice);
                         choiceBitset.andNot(coverBitmap);
                         selectedShards.put(choice, choiceBitset);
                         coverBitmap.or(choiceBitset);
-                    } 
-                    i++;
+                        if (logger.isTraceEnabled())
+                            logger.trace("pick node={} for token_ranges idx={} coverBitmap.cardinality={} coverBitmap={} remainingNodes={}", 
+                                    choice, choiceBitset, coverBitmap.cardinality(), coverBitmap, greenNodes);
+                    } else {
+                        if (logger.isDebugEnabled())
+                            logger.debug("No available node found for token_range={} idx={}", tokens.get(x), x);
+                    }
+                    i = x + 1;
                 }
+                if (logger.isTraceEnabled())
+                    logger.trace("coverBitmap.cardinality={} i={} selectedShards={}", coverBitmap.cardinality(), i, selectedShards);
             }
         
             return new Route()  {
