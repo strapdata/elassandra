@@ -69,9 +69,9 @@ Depending on the *op_type* and document ID, CQL requests are issued as follows w
 add parameter ``check_unique_id=false``.
 
 Insert operations are done with `Cassandra Consistency Level <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlshConsistency.html>`_ ``LOCAL_ONE`` by default. 
-If you want to insert or update with consistency level of ``ONE``, ``TWO``, ``THREE``, ``QUORUM``, ``LOCAL_QUORUM`` or ``EACH_QUORUM``, you can set the ``wait_for_active_shards`` parameter
+If you want to insert or update with consistency level of ``ONE``, ``TWO``, ``THREE``, ``QUORUM``, ``LOCAL_QUORUM``, ``EACH_QUORUM`` or ``ALL``, you can set the ``wait_for_active_shards`` parameter
 (index settings or request parameter, see `Wait For Active Shards <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-wait-for-active-shards>`_ ) 
-to ``1``, ``2``, ``3``, ``quorum``, ``local_quorum``, ``each_quorum``.
+to ``1``, ``2``, ``3``, ``quorum``, ``local_quorum``, ``each_quorum`` or ``all``.
 
 GETing
 ______
