@@ -1,3 +1,9 @@
+6.2.3.27 - 2020-04-13
+  * Upgrade to cassandra-3.11.6
+  * Fix RandomSearchStrategy #335
+  * Add a new RackAwareSearchStrategy
+  * Improve integration tests
+
 6.2.3.26 - 2020-02-29
   * Switch to cassandra 3.11.5.3
   * Improve gradle publication
