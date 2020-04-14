@@ -1130,16 +1130,6 @@ public class ClusterService extends BaseClusterService {
         return clusterName;
     }
 
-    public int getLocalDataCenterSize() {
-        int count = 1;
-        for (UntypedResultSet.Row row : executeInternal("SELECT data_center, rpc_address FROM system." + SystemKeyspace.PEERS))
-            if (row.has("rpc_address") && row.has("data_center") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
-                count++;
-        logger.info(" datacenter=[{}] size={} from peers", DatabaseDescriptor.getLocalDataCenter(), count);
-        return count;
-    }
-
-
     Void createElasticAdminKeyspace()  {
         try {
             Map<String, String> replication = ImmutableMap.of("class", NetworkTopologyStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter(), "1");
