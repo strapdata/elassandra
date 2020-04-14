@@ -73,6 +73,7 @@ import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.QueryManager;
+import org.elassandra.cluster.SchemaListener;
 import org.elassandra.cluster.SchemaManager;
 import org.elassandra.cluster.Serializer;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
@@ -99,6 +100,7 @@ import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.routing.OperationRouting;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -126,17 +128,7 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -612,10 +604,15 @@ public class ClusterService extends BaseClusterService {
         if (numberOfNodes == 0)
             return currentState; // for testing purposes.
 
+        Set<org.elasticsearch.index.Index> indiceRoutingToUpdate = new HashSet<>();
         MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
         for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
             IndexMetaData indexMetaData = it.next();
             if (ksName == null || ksName.equals(indexMetaData.keyspace())) {
+                Class<? extends AbstractSearchStrategy> searchStrategyClass =  IndexMetaData.INDEX_SEARCH_STRATEGY_CLASS_SETTING.get(indexMetaData.getSettings());
+                if (!searchStrategyClass.equals(PrimaryFirstSearchStrategy.class)) {
+                    indiceRoutingToUpdate.add(indexMetaData.getIndex());
+                }
                 IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
                 indexMetaDataBuilder.numberOfShards(numberOfNodes);
                 int rf = replicationFactor(indexMetaData.keyspace());
@@ -623,7 +620,12 @@ public class ClusterService extends BaseClusterService {
                 metaDataBuilder.put(indexMetaDataBuilder.build(), false);
             }
         }
-        return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
+
+        // rebuild routing table to update search strategy routers.
+       ClusterState newClusterState = ClusterState.builder(currentState).incrementVersion().metaData(metaDataBuilder.build()).build();
+       return ClusterState.builder(newClusterState)
+           .routingTable(RoutingTable.build(this, newClusterState, indiceRoutingToUpdate))
+           .build();
     }
 
     public void submitNumberOfShardsAndReplicasUpdate(final String source) {
