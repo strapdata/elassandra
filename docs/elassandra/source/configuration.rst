@@ -46,8 +46,8 @@ Elasticsearch configuration relies on Cassandra configuration file **conf/cassan
 
 Node role (master, primary, and data) is automatically set by Elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
 
-By default, Elasticsearch HTTP is bound to the Cassandra RPC address ``rpc_address``, while Elasticsearch transport protocol is bound to the Cassandra internal address ``listen_address``. 
-You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on 
+By default, Elasticsearch HTTP is bound to the Cassandra RPC address ``rpc_address``, while Elasticsearch transport protocol is bound to the Cassandra internal address ``listen_address``.
+You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on
 another interface).
 
 By default, Elasticsearch transport publish address is the Cassandra broadcast address. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast address is a public address managed by a firewall, and
@@ -94,7 +94,7 @@ It also involves cross-datacenter network latency for each mapping update.
 
 .. TIP::
 
-   Cassandra cross-datacenter writes are not sent directly to each replica. Instead, they are sent to a single replica with a parameter telling to the replica to forward to the other replicas in that datacenter. 
+   Cassandra cross-datacenter writes are not sent directly to each replica. Instead, they are sent to a single replica with a parameter telling to the replica to forward to the other replicas in that datacenter.
    These replicas will directly respond to the original coordinator. It reduces network traffic between datacenters when there are replicas.
 
 
@@ -134,7 +134,8 @@ Dynamic settings are only relevant for clusters, indexes and document type setti
 |                               |         |                              |                                          |                                                                                                                                                                                                                                 |
 |                               |         |                              |                                          | * *PrimaryFirstSearchStrategy* distributes search requests to all available nodes                                                                                                                                               |
 |                               |         |                              |                                          | * *RandomSearchStrategy* distributes search requests to a subset of available nodes covering the whole cassandra ring. It improves the search performances when RF > 1.                                                         |
-|                               |         |                              |                                          | * *RackAwareSearchStrategy* distributes search requests to nodes of the same Cassandra rack, or randomly in the datacenter for unavailable shards in the choosen rack. Choose the rack of the coordinator node, or a random one if its shard is unavailable. When RF >= number of racks, the RackAwareSearchStrategy involves the minimum number of nodes. |                                                    |
+|                               |         |                              |                                          | * *RackAwareSearchStrategy* distributes search requests to nodes of the same Cassandra rack, or randomly in the datacenter for unavailable shards in the chosen rack. Choose the rack of the coordinator node,                  |
+|                               |         |                              |                                          |   or a random one if its shard is unavailable. When RF >= number of racks, the RackAwareSearchStrategy involves the minimum number of nodes.                                                                                    |
 +-------------------------------+---------+------------------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | ``partition_function_class``  | static  | index, cluster               | **MessageFormatPartitionFunction**       | Partition function implementation class. Available implementations are :                                                                                                                                                        |
 |                               |         |                              |                                          |                                                                                                                                                                                                                                 |

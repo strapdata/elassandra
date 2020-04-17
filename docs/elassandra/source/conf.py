@@ -12,7 +12,6 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-from recommonmark.parser import CommonMarkParser
 import sys
 import os
 
@@ -43,7 +42,6 @@ pdf_documents = [
 templates_path = ['_templates']
 
 source_parsers = {
-    '.md': CommonMarkParser,
 }
 
 # The suffix(es) of source filenames.
