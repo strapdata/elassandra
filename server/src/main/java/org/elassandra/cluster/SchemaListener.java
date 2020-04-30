@@ -84,7 +84,6 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     public void onEndTransaction() {
         if (recordedMetaData != null || !recordedIndexMetaData.isEmpty()) {
             final ClusterState currentState = this.clusterService.state();
-            final ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
             final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
             final MetaData sourceMetaData = (recordedMetaData == null) ? currentState.metaData() : recordedMetaData;
             final MetaData.Builder metaDataBuilder = MetaData.builder(sourceMetaData);
@@ -96,9 +95,6 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
                 clusterService.mergeWithTableExtensions(metaDataBuilder);
             }
 
-            // update virtualized index mapping
-            final MetaData.Builder metaDataBuilder2 = clusterService.addVirtualIndexMappings(metaDataBuilder.build());
-
             // update blocks
             if (sourceMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
                 blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
@@ -107,12 +103,18 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
             for (IndexMetaData indexMetaData : sourceMetaData)
                 blocks.updateBlocks(indexMetaData);
 
+            final MetaData targetMetaData = metaDataBuilder.build();
+
             // summit the new clusterState to the MasterService for a local update.
             // keep the metadata.clusterUuid from the coordinator node.
             clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask(Priority.URGENT) {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
-                    ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(metaDataBuilder2).blocks(blocks).build();
+                    final ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+                    ClusterState newClusterState = newStateBuilder.incrementVersion()
+                        .metaData(clusterService.addVirtualIndexMappings(targetMetaData))
+                        .blocks(blocks)
+                        .build();
                     newClusterState = ClusterState.builder(newClusterState)
                             .routingTable(RoutingTable.build(SchemaListener.this.clusterService, newClusterState))
                             .build();
