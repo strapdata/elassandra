@@ -1,3 +1,8 @@
+6.2.3.28 - 2020-05-10
+  * Add support for datacenter tags
+  * Fixup NPE on cluster state update
+  * Add a new MessageFormatTimeUUIDPartitionFunction
+
 6.2.3.27 - 2020-04-13
   * Upgrade to cassandra-3.11.6
   * Fix RandomSearchStrategy #335
