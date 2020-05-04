@@ -420,6 +420,7 @@ public class QueryManager extends AbstractComponent {
                         query.append(query.length() > 7 ? ',' : ' ').append("TTL(").append(regularColumn).append(") as \"_ttl\"");
                     break;
                 case SeqNoFieldMapper.NAME:
+                    break;
                 case "_timestamp":
                     if (regularColumn == null)
                         regularColumn = regularColumn(indexShard, cfName);
