@@ -1160,7 +1160,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         if (newClusterState.metaData().version() <= clusterState().metaData().version()) {
             logger.warn("Ignore and acknowlegde obsolete update metadata={}", newClusterState.metaData().x2());
-            CassandraDiscovery.this.appliedClusterStateAction.sendAppliedToNode(coordinatorNode, newClusterState, null);
+            if (coordinatorNode != null) {
+                // coordinator from a remote DC maybe null.
+                CassandraDiscovery.this.appliedClusterStateAction.sendAppliedToNode(coordinatorNode, newClusterState, null);
+            }
             return;
         }
 
@@ -1310,7 +1313,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 pendingStatesQueue.markAsFailed(newClusterState, e);
             } catch (Exception inner) {
                 inner.addSuppressed(e);
-                logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
+                logger.error((java.util.function.Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
             }
             return false;
         }
@@ -1340,14 +1343,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
                 @Override
                 public void onFailure(String source, Exception e) {
-                    logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure applying [{}]", reason), e);
+                    logger.error((java.util.function.Supplier<?>) () -> new ParameterizedMessage("unexpected failure applying [{}]", reason), e);
                     try {
                         // TODO: use cluster state uuid instead of full cluster state so that we don't keep reference to CS around
                         // for too long.
                         pendingStatesQueue.markAsFailed(newClusterState, e);
                     } catch (Exception inner) {
                         inner.addSuppressed(e);
-                        logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
+                        logger.error((java.util.function.Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
                     }
                 }
             });
