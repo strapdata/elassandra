@@ -204,7 +204,7 @@ public class MetaDataIndexStateService {
      * should start to reject writing operations and we can proceed with step 2.
      */
      static ClusterState addIndexClosedBlocks(final Index[] indices, final Map<Index, ClusterBlock> blockedIndices, final ClusterState currentState, final ClusterService clusterService) {
-        final MetaData.Builder metadata = MetaData.builder(currentState.metaData());
+        final MetaData.Builder metadata = MetaData.builder(currentState.metaData()).setClusterUuid();
 
         final Set<IndexMetaData> indicesToClose = new HashSet<>();
         for (Index index : indices) {
@@ -315,7 +315,7 @@ public class MetaDataIndexStateService {
         }
     }
     */
-     
+
     /**
      * Step 3 - Move index states from OPEN to CLOSE in cluster state for indices that are ready for closing.
      */
