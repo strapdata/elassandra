@@ -1,7 +1,7 @@
 version: '2.4'
 services:
   seed_node:
-    image: "strapdata.azurecr.io/strapdata/elassandra-dev:6.8.4.0-SNAPSHOT"
+    image: "strapdata.azurecr.io/strapdata/elassandra-dev:latest"
     environment:
       - "JVM_OPTS=-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
       - "MAX_HEAP_SIZE=1200m"
@@ -17,7 +17,7 @@ services:
       - "9042:9042"
       - "9200:9200"
   node:
-    image: "strapdata.azurecr.io/strapdata/elassandra-dev:6.8.4.0-SNAPSHOT"
+    image: "strapdata.azurecr.io/strapdata/elassandra-dev:latest"
     environment:
       - "JVM_OPTS=-Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
       - "MAX_HEAP_SIZE=1200m"
