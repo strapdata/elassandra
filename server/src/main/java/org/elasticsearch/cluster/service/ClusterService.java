@@ -58,7 +58,6 @@ import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.codehaus.jackson.JsonGenerationException;
@@ -93,6 +92,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.Inject;
@@ -112,10 +112,8 @@ import org.elasticsearch.index.engine.InternalEngine;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -134,16 +132,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.management.JMX;
-import javax.management.MalformedObjectNameException;
-import javax.management.ObjectName;
+import java.util.stream.Collectors;
 
 import static java.util.Collections.emptyList;
-import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.common.settings.Setting.listSetting;
-
+import static org.elasticsearch.common.settings.Setting.simpleString;
 
 public class ClusterService extends BaseClusterService {
 
@@ -154,8 +149,13 @@ public class ClusterService extends BaseClusterService {
     public static final String ELASTIC_EXTENSION_VERSION = "version";
     public static final String ELASTIC_EXTENSION_OWNER = "owner";
 
+    // default datacenter group
     public static final String SETTING_CLUSTER_DATACENTER_GROUP = "datacenter.group";
-    public static final Setting<List<String>> SETTING_DATCENTER_GROUP = listSetting(SETTING_CLUSTER_DATACENTER_GROUP, emptyList(), Function.identity(), Property.NodeScope);
+    public static final Setting<String> SETTING_DATCENTER_GROUP = simpleString(SETTING_CLUSTER_DATACENTER_GROUP, Property.NodeScope);
+
+    // integrated datacenter tags
+    public static final String SETTING_CLUSTER_DATACENTER_TAGS = "datacenter.tags";
+    public static final Setting<List<String>> SETTING_DATACENTER_TAGS = listSetting(SETTING_CLUSTER_DATACENTER_TAGS, emptyList(), Function.identity(), Property.NodeScope);
 
     // settings levels : system, cluster, index, table(_meta)
     public static final String SYSTEM_PREFIX = "es.";
@@ -346,6 +346,7 @@ public class ClusterService extends BaseClusterService {
     private final ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl", "QUORUM"));
     private final ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl", "SERIAL"));
 
+    private final List<String> datacenterTags;
     private final String elasticAdminKeyspaceName;
     private final String selectVersionMetadataQuery;
     private final String selectOwnerMetadataQuery;
@@ -372,11 +373,15 @@ public class ClusterService extends BaseClusterService {
 
         String datacenterGroup = settings.get(SETTING_CLUSTER_DATACENTER_GROUP);
         if (datacenterGroup != null && datacenterGroup.length() > 0) {
-            logger.info("Starting with datacenter.group=[{}]", datacenterGroup.trim().toLowerCase(Locale.ROOT));
-            elasticAdminKeyspaceName = String.format(Locale.ROOT, "%s_%s", ELASTIC_ADMIN_KEYSPACE,datacenterGroup.trim().toLowerCase(Locale.ROOT));
+            elasticAdminKeyspaceName = String.format(Locale.ROOT, "%s_%s", ELASTIC_ADMIN_KEYSPACE, datacenterGroup.trim().toLowerCase(Locale.ROOT));
         } else {
             elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
         }
+        logger.info("Starting with elastic_admin keyspace=[{}]", elasticAdminKeyspaceName);
+
+        this.datacenterTags = SETTING_DATACENTER_TAGS.get(settings);
+        logger.info("Starting with datacenter.tags={}", datacenterTags);
+
         selectVersionMetadataQuery = String.format(Locale.ROOT,
                 "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ? LIMIT 1",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
@@ -863,20 +868,20 @@ public class ClusterService extends BaseClusterService {
     public MetaData readMetaData(CFMetaData cfm) {
         try {
             byte[] bytes = ByteBufferUtil.getArray(cfm.params.extensions.get(ClusterService.ELASTIC_EXTENSION_METADATA));
-            return metaStateService.loadGlobalState(bytes);
+            MetaData metadata = metaStateService.loadGlobalState(bytes);
+
+            // filter indices with no matching datacenter tag
+            MetaData.Builder builder = MetaData.builder(metadata);
+            for(ObjectCursor<IndexMetaData> cursor : metadata.indices().values()) {
+                IndexMetaData indexMetaData = cursor.value;
+                String datacenterTag = indexMetaData.datacenterTag();
+                if (datacenterTag != null && !this.datacenterTags.contains(datacenterTag))
+                    builder.remove(indexMetaData.getIndex().getName());
+            }
+            return builder.build();
         } catch (IOException e) {
             throw new ElasticsearchException("Failed to deserialize metadata", e);
         }
-    }
-
-    public boolean isValidTypeExtension(String extensionName) {
-        return extensionName != null && extensionName.startsWith(getElasticAdminKeyspaceName() + "/");
-    }
-
-    public String getIndexNameFromExtensionName(String extensionName) {
-        return (isValidTypeExtension(extensionName)) ?
-                extensionName.substring(getElasticAdminKeyspaceName().length() + 1) :
-                null;
     }
 
     public void putIndexMetaDataExtension(IndexMetaData indexMetaData, Map<String, ByteBuffer> extensions) {
@@ -891,8 +896,23 @@ public class ClusterService extends BaseClusterService {
         }
     }
 
+    static Pattern extensionKeyPattern = Pattern.compile(ELASTIC_ADMIN_KEYSPACE + "(_[a-zA-Z0-9_\\-]+)?/.*");
+
+    public boolean isValidExtensionKey(String extensionName) {
+        if (extensionName == null)
+            return false;
+
+        Matcher matcher = extensionKeyPattern.matcher(extensionName);
+        if (!matcher.matches())
+            return false;
+
+        String tag = matcher.group(1);
+        return Strings.isNullOrEmpty(tag) || this.datacenterTags.contains(tag.substring(1));
+    }
+
     public String getExtensionKey(IndexMetaData indexMetaData) {
-        return getElasticAdminKeyspaceName() + "/" + indexMetaData.getIndex().getName();
+        String indexDcTag = indexMetaData.datacenterTag();
+        return (indexDcTag == null ? getElasticAdminKeyspaceName() : ELASTIC_ADMIN_KEYSPACE + "_" + indexDcTag) + "/" + indexMetaData.getIndex().getName();
     }
 
     public IndexMetaData getIndexMetaDataFromExtension(ByteBuffer value) {
@@ -940,7 +960,7 @@ public class ClusterService extends BaseClusterService {
                                 if (cfmx.params.extensions != null) {
                                     logger.trace("ks.cf={}.{} metadata.version={} extensions={}", ksmx.name, cfmx.cfName, metaData.version(), cfmx.params.extensions);
                                     for(Map.Entry<String, ByteBuffer> entry : cfmx.params.extensions.entrySet()) {
-                                        if (isValidTypeExtension(entry.getKey())) {
+                                        if (isValidExtensionKey(entry.getKey())) {
                                             IndexMetaData indexMetaData = getIndexMetaDataFromExtension(entry.getValue());
                                             indexMetaDataExtensions.put(indexMetaData.getIndex().getName(), indexMetaData);
 
@@ -978,7 +998,7 @@ public class ClusterService extends BaseClusterService {
 
                 final MetaData finalMetaData = metaDataBuilder.build();
                 logger.info("Elasticsearch metadata succesfully loaded from CQL table extensions metadata.version={}", finalMetaData.version());
-                logger.trace("metadata={}", finalMetaData);
+                logger.trace("metadata.indices={}", finalMetaData.indices());
                 return finalMetaData;
             } catch (Exception e) {
                 throw new NoPersistedMetaDataException("Failed to parse metadata extentions", e);
@@ -1031,7 +1051,7 @@ public class ClusterService extends BaseClusterService {
                             if (logger.isTraceEnabled())
                                 logger.trace("ks.cf={} extensions={}", ksmx.name, cfmx.cfName,cfmx.params.extensions);
                             for(Map.Entry<String, ByteBuffer> entry : cfmx.params.extensions.entrySet()) {
-                                if (isValidTypeExtension(entry.getKey())) {
+                                if (isValidExtensionKey(entry.getKey())) {
                                     IndexMetaData indexMetaData = getIndexMetaDataFromExtension(entry.getValue());
                                     indexMetaDataExtensions.put(indexMetaData.getIndex().getName(), indexMetaData);
 

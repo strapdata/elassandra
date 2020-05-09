@@ -467,6 +467,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                     OperationRouting.USE_ADAPTIVE_REPLICA_SELECTION_SETTING,
                     IndexGraveyard.SETTING_MAX_TOMBSTONES,
                     ClusterService.SETTING_DATCENTER_GROUP,
+                    ClusterService.SETTING_DATACENTER_TAGS,
                     EnableAssignmentDecider.CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING,
                     PersistentTasksClusterService.CLUSTER_TASKS_ALLOCATION_RECHECK_INTERVAL_SETTING
             )));

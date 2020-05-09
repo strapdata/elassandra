@@ -98,6 +98,7 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexMetaData.INDEX_SETTING_TABLE_SETTING,
         IndexMetaData.INDEX_SETTING_TABLE_OPTIONS_SETTING,
         IndexMetaData.INDEX_SETTING_REPLICATION_SETTING,
+        IndexMetaData.INDEX_SETTING_DATACENTER_TAG_SETTING,
         IndexMetaData.INDEX_INDEX_STATIC_COLUMNS_SETTING,
         IndexMetaData.INDEX_INDEX_STATIC_ONLY_SETTING,
         IndexMetaData.INDEX_INDEX_STATIC_DOCUMENT_SETTING,

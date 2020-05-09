@@ -59,7 +59,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     // record per transaction changes (
     boolean record = false;
     MetaData recordedMetaData = null;
-    ListMultimap<String, IndexMetaData> recordedIndexMetaData = ArrayListMultimap.create(); // indexName -> List of IndexMetaData with a single mapping
+    final ListMultimap<String, IndexMetaData> recordedIndexMetaData = ArrayListMultimap.create(); // indexName -> List of IndexMetaData with a single mapping
 
     public SchemaListener(Settings settings, ClusterService clusterService) {
         this.clusterService = clusterService;
@@ -207,10 +207,9 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     void updateElasticsearchMapping(KeyspaceMetadata ksm, CFMetaData cfm) {
         boolean hasSecondaryIndex = cfm.getIndexes().has(SchemaManager.buildIndexName(cfm.cfName));
         for(Map.Entry<String, ByteBuffer> e : cfm.params.extensions.entrySet()) {
-            if (clusterService.isValidTypeExtension(e.getKey())) {
+            if (clusterService.isValidExtensionKey(e.getKey())) {
                     IndexMetaData indexMetaData = clusterService.getIndexMetaDataFromExtension(e.getValue());
-                    if (recordedIndexMetaData != null)
-                        recordedIndexMetaData.put(indexMetaData.getIndex().getName(), indexMetaData);
+                    recordedIndexMetaData.put(indexMetaData.getIndex().getName(), indexMetaData);
 
                     if (hasSecondaryIndex)
                         indexMetaData.getMappings().forEach( m -> SchemaManager.typeToCfName(ksm.name, m.value.type()) );
