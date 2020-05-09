@@ -15,7 +15,8 @@ public class ElassandraCli extends LoggingAwareMultiCommand {
 
     public ElassandraCli() {
         super("A tool for various Elassandra actions");
-        subcommands.put("decodeSmile", new DecodeSmileCommand());
+        subcommands.put("decodeMetadata", new DecodeMetaDataCommand());
+        subcommands.put("decodeIndexMetadata", new DecodeIndexMetaDataCommand());
         commands = Collections.unmodifiableCollection(subcommands.values());
     }
 

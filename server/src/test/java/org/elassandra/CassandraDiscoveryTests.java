@@ -28,7 +28,6 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.elassandra.cli.DecodeSmileCommand;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
@@ -177,17 +176,17 @@ public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
         assertEquals(1, urs.size());
         Map<String, ByteBuffer> extensionsMap = urs.one().getMap("extensions", UTF8Type.instance, BytesType.instance);
         assertNotNull(extensionsMap);
-        
+
         IndexMetaData indexMetaDataTest1 = clusterService().getIndexMetaDataFromExtension(extensionsMap.get("elastic_admin/test1"));
         MappingMetaData mmd = indexMetaDataTest1.getMappings().get("t1");
         assertNotNull(mmd);
-        
+
         Map<String, Object> mapping = mmd.getSourceAsMap();
         assertNotNull(mapping);
-        
+
         Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
         assertNotNull(properties);
-        
+
         assertTrue(properties.containsKey("id"));
         for (int i = 1; i <= NB_FIELDS; ++i) {
             assertTrue(properties.containsKey(String.format("c%05d", i)));

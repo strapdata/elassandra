@@ -9,6 +9,7 @@ import org.apache.cassandra.utils.Hex;
 import org.elasticsearch.cli.LoggingAwareCommand;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.xcontent.*;
 
 import java.io.ByteArrayOutputStream;
@@ -20,30 +21,27 @@ import java.util.Map;
 
 import static org.elasticsearch.cluster.metadata.MetaData.CONTEXT_CASSANDRA_PARAM;
 
-public class DecodeSmileCommand extends LoggingAwareCommand {
-
-    private final JsonFactory jsonFactory = new JsonFactory();
-    private final SmileFactory smileFactory = new SmileFactory();
+public class DecodeIndexMetaDataCommand extends LoggingAwareCommand {
 
     private final OptionSpec<String> smileOption = parser.acceptsAll(Arrays.asList("s", "smile"), "smile to decode (in hex format)").withRequiredArg().required().ofType(String.class);
 
-    public DecodeSmileCommand() {
-        super("Command to decode the smile form of en ElasticSearch index description");
+    public DecodeIndexMetaDataCommand() {
+        super("Command to decode the index metadata form a table extension");
     }
 
     @Override
     protected void execute(Terminal terminal, OptionSet options) throws Exception {
         final String smile = options.valueOf(smileOption);
         terminal.println(String.format("Decoding : [%s]", smile));
-        terminal.println(convertToJson(smile));
+        terminal.println(convertToIndexMetaData(smile));
     }
 
-    private String convertToJson(String smile) {
+    private String convertToIndexMetaData(String smile) {
         final byte[] bytes = Hex.hexToBytes(smile.startsWith("0x") ? smile.substring(2) : smile);
-        return convertToJson(bytes);
+        return convertToIndexMetaData(bytes);
     }
 
-    public final String convertToJson(byte[] bytes) {
+    public final String convertToIndexMetaData(byte[] bytes) {
         try{
             IndexMetaData indexMetaData = IndexMetaData.FORMAT.loadLatestState(null, new NamedXContentRegistry(Collections.emptyList()), bytes);
 
@@ -57,6 +55,7 @@ public class DecodeSmileCommand extends LoggingAwareCommand {
 
             builder.endObject();
 
+            builder.flush();
             return builder.bytes().utf8ToString();
         } catch (IOException e) {
             throw new InvalidRequestException(String.format("Error while converting smile to json : %s", e.getMessage()));
