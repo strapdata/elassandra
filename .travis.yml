@@ -1,4 +1,3 @@
-dist: trusty
 sudo: required
 env:
   global:
@@ -6,7 +5,6 @@ env:
     - CASSANDRA_JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
     - JAVA9_HOME=/home/travis/jdk-9.0.4
     - JAVA12_HOME=/home/travis/jdk-12.0.2
-    - CASSANDRA_JAVA_HOME=/usr/lib/jvm/java-8-oracle
     # this variable determine when docker images are tagged 'latest'
     - LATEST_VERSION=6.8.4
     # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
@@ -18,9 +16,19 @@ env:
 language:
   - java
   - bash
+  - python
+
+python: 3
+addons:
+  apt:
+    update: true
+    packages:
+      - jq
+      - bash
+      - python3-pip
 
 jdk:
-  - oraclejdk8
+  - openjdk8
 
 services:
   - docker
@@ -35,10 +43,17 @@ cache:
     - $HOME/.gradle/wrapper/
     # Cache our Gcloud SDK between commands
     - $HOME/google-cloud-sdk/
+    - $HOME/.cache/pip
 
 before_install:
   - wget -qO ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
   - unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
+  - pip3 install sphinx~=1.8.5 sphinx_rtd_theme
+  - sudo fallocate -l 4G /swapfile
+  - sudo chmod 600 /swapfile
+  - sudo mkswap /swapfile
+  - sudo swapon /swapfile
+  - sudo sysctl vm.swappiness=10
 
 install:
   - cd ${TRAVIS_BUILD_DIR}
