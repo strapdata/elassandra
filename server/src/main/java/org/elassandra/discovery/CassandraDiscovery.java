@@ -49,6 +49,7 @@ import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
@@ -606,47 +607,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
 
-    /*
-    public boolean updateNode(InetAddress endpoint, EndpointState epState) {
-        if (isLocal(endpoint)) {
-            UUID hostUuid = (epState.getApplicationState(ApplicationState.HOST_ID) == null) ?
-                    StorageService.instance.getHostId(endpoint) :
-                    UUID.fromString(epState.getApplicationState(ApplicationState.HOST_ID) .value);
-
-            boolean updatedNode = clusterGroup.update(epState, hostUuid.toString(), endpoint, getInternalIp(epState), getRpcAddress(epState));
-
-            // update remote shard routing view.
-            DiscoveryNodeStatus newStatus = discoveryNodeStatus(epState);
-            switch(newStatus) {
-            case ALIVE:
-                VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
-                if (x1 != null) {
-                    try {
-                        Map<String, ShardRoutingState> newShardsStateMap = jsonMapper.readValue(uncompressIfGZipped(x1.value), indexShardStateTypeReference);
-                        Map<String, ShardRoutingState> oldShardsStateMap = this.remoteShardRoutingStateMap.put(hostUuid, newShardsStateMap);
-                        if (!newShardsStateMap.equals(oldShardsStateMap)) {
-                            updatedNode = true; // force update if X1 changed
-                        }
-                    } catch (IOException e) {
-                        logger.error("Failed to parse X1 for node=[{}]", hostUuid);
-                    }
-                }
-                break;
-            default:
-                if (this.remoteShardRoutingStateMap.remove(hostUuid) != null) {
-                    updatedNode = true; // force update if X1 changed
-                }
-            }
-
-            if (updatedNode) {
-                updateNodesTable("update-node-" + NetworkAddress.format(endpoint)+"-"+newStatus.toString());
-                return true;
-            }
-        }
-        return false;
-    }
-*/
-
     private boolean isLocal(InetAddress endpoint) {
         return DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc);
     }
@@ -871,6 +831,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             clusterService.submitStateUpdateTask("searchEnabled-changed-to-"+ready, new RoutingTableUpdateTask(true),
                 routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
         }
+    }
+
+    public void updateRoutingTable(Set<String> indices, ClusterStateTaskListener listener) {
+        clusterService.submitStateUpdateTask("update-routing-table", new RoutingTableUpdateTask(true, indices),
+            routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, listener);
     }
 
     public void publishX1() throws JsonGenerationException, JsonMappingException, IOException {
