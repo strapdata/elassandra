@@ -23,8 +23,8 @@ Elasticsearch paths are set according to the following environment variables and
 
 .. _elassandra_configuration:
 
-Configuration
--------------
+Node configuration
+------------------
 
 Elasticsearch configuration relies on Cassandra configuration file **conf/cassandra.yaml** for the following parameters.
 
@@ -46,8 +46,8 @@ Elasticsearch configuration relies on Cassandra configuration file **conf/cassan
 
 Node role (master, primary, and data) is automatically set by Elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
 
-By default, Elasticsearch HTTP is bound to the Cassandra RPC address ``rpc_address``, while Elasticsearch transport protocol is bound to the Cassandra internal address ``listen_address``. 
-You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on 
+By default, Elasticsearch HTTP is bound to the Cassandra RPC address ``rpc_address``, while Elasticsearch transport protocol is bound to the Cassandra internal address ``listen_address``.
+You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on
 another interface).
 
 By default, Elasticsearch transport publish address is the Cassandra broadcast address. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast address is a public address managed by a firewall, and
@@ -67,6 +67,7 @@ See `cassandra logging configuration <https://docs.datastax.com/en/cassandra/2.1
 
 Per keyspace (or per table) logging level can be configured using the logger name ``org.elassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
 
+.. _multi-datacenter-configuration:
 
 Multi datacenter configuration
 ------------------------------
@@ -81,11 +82,8 @@ If you want to manage various Elasticsearch clusters within a Cassandra cluster 
 These elasticsearch clusters will be named <cluster_name>@<datacenter.group> and mappings will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
 
 All ``elastic_admin[_<datacenter.group>]`` keyspaces are configured with **NetworkReplicationStrategy** (see `data replication <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_).
-where the replication factor is automatically set to the number of nodes in each datacenter. It ensures maximum availibility for the elaticsearch metadata. When removing a node from an elassandra datacenter, you should manually decrease the ``elastic_admin[_<datacenter.group>]`` replication factor in accordance with the number of nodes.
-
-When a mapping change occurs, Elassandra updates the Elasticsearch metadata in `elastic_admin[_<datacenter.group>].metadata` within a `lightweight transaction <https://docs.datastax.com/en/cassandra/2.1/cassandra/dml/dml_ltwt_transaction_c.html>`_ to avoid conflict with concurrent updates.
-This transaction requires QUORUM available nodes that are more than half the nodes of one or more datacenters regarding your ``datacenter.group`` configuration.
-It also involves cross-datacenter network latency for each mapping update.
++where the replication factor is **ONE** by default. When a mapping change occurs, Elassandra updates the Elasticsearch metadata in `elastic_admin[_<datacenter.group>].metadata` within a `lightweight transaction <https://docs.datastax.com/en/cassandra/2.1/cassandra/dml/dml_ltwt_transaction_c.html>`_ to avoid conflict with concurrent updates.
+This transaction requires **QUORUM** available replicas and may involves cross-datacenter network latency for each Elasticsearch mapping update.
 
 .. CAUTION::
 
@@ -93,9 +91,16 @@ It also involves cross-datacenter network latency for each mapping update.
 	In such case, the Elasticsearch shards remain UNASSIGNED and indices are red. You can fix that by manually altering the keyspace replication map,
 	or use the Elassandra ``index.replication`` setting to properly configure it when creating the index.
 
+If you want to deploy some indices to only a subset of the datacenters where your elastic_admin keyspace is replicated:
+
+* Define a list of ``datacenter.tags`` in your **conf/elasticsearch.yml**.
+* Add the index setting ``index.datacenter_tag`` to your local indices.
+
+A tagged Elasticsearch index is visible from Cassandra datacenters having a matching tag in their ``datacenter.tags``.
+
 .. TIP::
 
-   Cassandra cross-datacenter writes are not sent directly to each replica. Instead, they are sent to a single replica with a parameter telling to the replica to forward to the other replicas in that datacenter. 
+   Cassandra cross-datacenter writes are not sent directly to each replica. Instead, they are sent to a single replica with a parameter telling to the replica to forward to the other replicas in that datacenter.
    These replicas will directly respond to the original coordinator. It reduces network traffic between datacenters when there are replicas.
 
 
@@ -126,6 +131,8 @@ Dynamic settings are only relevant for clusters, indexes and document type setti
 +-------------------------------+---------+------------------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | ``replication``               | static  | index                        | *local_datacenter*:*number_of_replica+1* | A comma separated list of *datacenter_name*:*replication_factor*  used when creating the underlying cassandra keyspace (For exemple "DC1:1,DC2:2").                                                                             |
 |                               |         |                              |                                          | Remember that when a keyspace is not replicated to an elasticsearch-enabled datacenter, elassandra cannot open the keyspace and the associated elasticsearch index remains red.                                                 |
++-------------------------------+---------+------------------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``datacenter_tag``            | dynamic | index                        |                                          | Set a datacenter tag. A tagged index is only visible on the Cassandra datacenters having the tag in its ``datacenter.tags`` settings, see :ref:`multi-datacenter-configuration`.                                                |
 +-------------------------------+---------+------------------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | ``table_options``             | static  | index                        |                                          | Cassandra table options use when creating the underlying table (like "default_time_to_live = 300"). See the `cassandra documentation <http://cassandra.apache.org/doc/4.0/cql/ddl.html#table-options>`_ for available options.  |
 +-------------------------------+---------+------------------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

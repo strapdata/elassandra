@@ -339,13 +339,17 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             Setting.simpleString(SETTING_TABLE_OPTIONS, Property.Final, Property.IndexScope);
 
     public static final String SETTING_REPLICATION = "index.replication";
-    public static final Pattern dcReplicationPattern = Pattern.compile("^[_A-Za-z][_A-Za-z0-9]+:\\d++$");
+    public static final Pattern dcReplicationPattern = Pattern.compile("^[_A-Za-z][\\-_A-Za-z0-9]+:\\d++$");
     public static final Setting<List<String>> INDEX_SETTING_REPLICATION_SETTING =
             Setting.listSetting(SETTING_REPLICATION, Collections.EMPTY_LIST, (s) -> {
                 if (!dcReplicationPattern.matcher(s).matches())
                     throw new IllegalArgumentException("Expecting a valid keyspace replication expression");
                 return s;
             }, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_DATACENTER_TAG = "index.datacenter_tag";
+    public static final Setting<String> INDEX_SETTING_DATACENTER_TAG_SETTING =
+        Setting.simpleString(SETTING_DATACENTER_TAG, Property.Dynamic, Property.IndexScope);
 
     public static final String SETTING_SECONDARY_INDEX_CLASS = INDEX_SETTING_PREFIX+ClusterService.SECONDARY_INDEX_CLASS;
     public static final Setting<String> INDEX_SECONDARY_INDEX_CLASS_SETTING =
@@ -615,6 +619,8 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public String tableOptions() {
         return getSettings().get(IndexMetaData.SETTING_TABLE_OPTIONS);
     }
+
+    public String datacenterTag() { return getSettings().get(IndexMetaData.SETTING_DATACENTER_TAG); }
 
     public Map<String, Integer> replication() {
         Map<String, Integer> replicationMap = new HashMap<>();

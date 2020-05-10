@@ -426,6 +426,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                     Node.BREAKER_TYPE_KEY,
                     OperationRouting.USE_ADAPTIVE_REPLICA_SELECTION_SETTING,
                     IndexGraveyard.SETTING_MAX_TOMBSTONES,
-                    ClusterService.SETTING_DATCENTER_GROUP
+                    ClusterService.SETTING_DATCENTER_GROUP,
+                    ClusterService.SETTING_DATACENTER_TAGS
             )));
 }

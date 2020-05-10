@@ -22,11 +22,12 @@ test_end() {
 
 finish() {
   echo "ERROR occurs, test failed"
-#  cat ~/.ccm/$cluster_name/node1/logs/system.log
-#  cat ~/.ccm/$cluster_name/node2/logs/system.log
-#  cat ~/.ccm/$cluster_name/node3/logs/system.log
-   cat ~/.ccm/$cluster_name/node4/logs/system.log
-   cat ~/.ccm/$cluster_name/node5/logs/system.log
+  for i in {1..5};
+  do
+    if [ -f ~/.ccm/$cluster_name/node$i/logs/system.log ]; then
+       cat ~/.ccm/$cluster_name/node$i/logs/system.log
+    fi
+  done
   exit 1
 }
 
@@ -40,6 +41,11 @@ destroy_cluster() {
   ccm remove
 }
 
+add_datacenter_tags() {
+  IDX=$1
+  echo "datacenter.tags: [ $2 ]" > ~/.ccm/$cluster_name/node$IDX/conf/elasticsearch.yml
+}
+
 start_node() {
   IDX=$1
   ccm "node$IDX" start
@@ -47,7 +53,7 @@ start_node() {
   if [ $? -ne 0 ]; then
   	 cat ~/.ccm/$cluster_name/node$IDX/logs/system.log
   fi
- 
+
   sleep 35
 
   echo "Waiting node$IDX restart"
@@ -55,12 +61,20 @@ start_node() {
   do
     sleep 5
   done
- 
+
   # wait green node
-  STATUS=$(curl "http://127.0.0.${IDX}:9200/_cluster/health?wait_for_status=green&wait_for_active_shards=all&timeout=60s&pretty&local=true" | jq '.status')
-  echo "Node node$IDX status=$STATUS"
+  check_cluster_status $IDX "green"
 
   curl "http://127.0.0.${IDX}:9200/_cluster/state?pretty"
+}
+
+check_cluster_status() {
+  IDX=$1
+  STATUS=$(curl "http://127.0.0.${IDX}:9200/_cluster/health?wait_for_status=green&wait_for_active_shards=all&timeout=60s&pretty&local=true" | jq -r '.status')
+  echo "Node node$IDX status=$STATUS"
+  if [ "$STATUS" != "$2" ]; then
+    return 1
+  fi
 }
 
 # $1 = node index
@@ -98,13 +112,19 @@ function create_index_with_rack_search() {
   curl -H 'Content-Type: application/json' -XPUT "http://localhost:9200/$1" -d'{ "settings":{ "index.search_strategy_class":"RackAwareSearchStrategy"} }'
 }
 
+# $1 = node index
+# $2 = index name
+function create_index_in_local_datacenter() {
+  curl -H 'Content-Type: application/json' -XPUT "http://127.0.0.$1:9200/$1" -d'{ "settings":{ "index.datacenter_group": "${dc}", "index.replication": "${dc}:1" } }'
+}
+
 # $1 = index name
 # $2 = doc count
 # $3 = consistency (1 by default)
 function insert_doc() {
   echo "Inserting $2 docs in $1"
-  for i in $( seq 1 $2 ); 
-  do 
+  for i in $( seq 1 $2 );
+  do
     curl -H 'Content-Type: application/json' -XPOST "http://localhost:9200/$1/doc?wait_for_active_shards=${3:-1}" -d'{"foo":"bar"}' 2>/dev/null
   done
   # wait for async cassandra replication
