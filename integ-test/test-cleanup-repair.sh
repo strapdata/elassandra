@@ -66,6 +66,9 @@ echo "### Repair test, with RF=2"
 alter_rf test 2
 repair 1 test
 repair 2 test
+
+curl -XPOST "http://127.0.0.1:9200/test/_refresh"
+
 doc_count test $((2*$N))
 total_hit 1 test $N
 total_hit 2 test $N
@@ -76,6 +79,8 @@ echo "### Repair test2, with RF=2"
 alter_rf test2 2
 repair 1 test2
 repair 2 test2
+curl -XPOST "http://127.0.0.1:9200/test2/_refresh"
+
 doc_count test2 $((2*$N))
 total_hit 1 test2 $N
 total_hit 2 test2 $N
@@ -105,6 +110,8 @@ alter_rf test 3
 repair 1 test
 repair 2 test
 repair 3 test
+curl -XPOST "http://127.0.0.1:9200/test/_refresh"
+
 doc_count test $((3*$N))
 total_hit 1 test $N
 total_hit 2 test $N
@@ -129,6 +136,7 @@ alter_rf test 2
 cleanup 1
 cleanup 2
 cleanup 3
+curl -XPOST "http://127.0.0.1:9200/test/_refresh"
 
 doc_count test $((2*$N))
 total_hit 1 test $N
@@ -194,11 +202,14 @@ if [ -z "$TRAVIS" ]; then
     repair 3 test
     repair 4 test
     repair 5 test
+    sleep 2
+
     cleanup 1
     cleanup 2
     cleanup 3
     cleanup 4
     cleanup 5
+    sleep 2
     doc_count test $((6*$N))
 
     total_hit 1 test $((2*$N))
@@ -219,6 +230,7 @@ if [ -z "$TRAVIS" ]; then
     repair 3 test2
     repair 4 test2
     repair 5 test2
+    sleep 2
 
     total_hit 1 test2 $N
     total_hit 2 test2 $N
