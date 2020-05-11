@@ -44,6 +44,8 @@ curl -H 'Content-Type: application/json' -XPUT "http://127.0.0.1:9200/log-dc1?wa
 insert_doc test $N
 insert_doc log-dc1 $N
 
+curl -XPOST "http://127.0.0.1:9200/test/_refresh"
+curl -XPOST "http://127.0.0.1:9200/log-dc1/_refresh"
 total_hit 1 test $N
 total_hit 1 log-dc1 $N
 
@@ -59,10 +61,14 @@ curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.2:9200/log-dc2/d
 
 check_cluster_status 1 "green"
 check_cluster_status 2 "green"
+curl -XPOST "http://127.0.0.2:9200/test/_refresh"
 
 total_hit 1 test $N
 total_hit 2 test $N
+
 total_hit 1 log-dc1 $N
+
+curl -XPOST "http://127.0.0.2:9200/log-dc2/_refresh"
 total_hit 2 log-dc2 1
 
 echo "### Scale up 3 nodes, with RF=1"
@@ -85,15 +91,19 @@ total_hit 1 test $N
 total_hit 2 test $N
 total_hit 3 test $N
 
-total_hit 1 log-dc1 $N
 
+
+total_hit 1 log-dc1 $N
 total_hit 2 log-dc2 1
 
-# wait asynchronous cross-datacenter replication on our single test machine.
-sleep 3
+# wait for cross-dc asynchronous replication
+sleep 2
 
-total_hit 2 log-dc3 3
+curl -XPOST "http://127.0.0.3:9200/log-dc3/_refresh"
 total_hit 3 log-dc3 3
+
+curl -XPOST "http://127.0.0.2:9200/log-dc3/_refresh"
+total_hit 2 log-dc3 3
 
 delete_index test
 test_end
