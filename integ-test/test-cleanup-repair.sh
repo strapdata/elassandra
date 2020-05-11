@@ -52,6 +52,9 @@ echo "### Scale up 2 nodes, with RF=1"
 scale_up 2 DC1 r2
 ccm node1 status
 ccm node1 ring
+curl -XGET  "http://127.0.0.1:9200/test/_cat/indices?v" 2>/dev/null
+curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
+
 total_hit 1 test $N
 total_hit 2 test $N
 total_shards 1 test 2 2
@@ -66,6 +69,8 @@ echo "### Repair test, with RF=2"
 alter_rf test 2
 repair 1 test
 repair 2 test
+curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
+
 doc_count test $((2*$N))
 total_hit 1 test $N
 total_hit 2 test $N
@@ -76,6 +81,8 @@ echo "### Repair test2, with RF=2"
 alter_rf test2 2
 repair 1 test2
 repair 2 test2
+curl -XPOST "http://127.0.0.1:9200/test2/_refresh" 2>/dev/null
+
 doc_count test2 $((2*$N))
 total_hit 1 test2 $N
 total_hit 2 test2 $N
@@ -86,6 +93,9 @@ echo "### Scale up 3 nodes, with RF=2"
 scale_up 3 DC1 r3
 ccm node1 status
 ccm node1 ring
+curl -XGET "http://127.0.0.1:9200/test/_cat/indices?v" 2>/dev/null
+curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
+
 total_hit 1 test $N
 total_hit 2 test $N
 total_hit 3 test $N
@@ -105,6 +115,8 @@ alter_rf test 3
 repair 1 test
 repair 2 test
 repair 3 test
+curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
+
 doc_count test $((3*$N))
 total_hit 1 test $N
 total_hit 2 test $N
@@ -129,6 +141,7 @@ alter_rf test 2
 cleanup 1
 cleanup 2
 cleanup 3
+curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
 
 doc_count test $((2*$N))
 total_hit 1 test $N
@@ -155,6 +168,9 @@ echo "### Scale up 4 nodes, with RF=2"
 scale_up 4 DC1 r1
 ccm node1 status
 ccm node1 ring
+curl -XGET "http://127.0.0.1:9200/test/_cat/indices?v" 2>/dev/null
+curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
+
 total_hit 1 test $((2*$N))
 total_hit 2 test $((2*$N))
 total_hit 3 test $((2*$N))
@@ -166,6 +182,8 @@ if [ -z "$TRAVIS" ]; then
 
     ccm node1 status
     ccm node1 ring
+    curl -XGET "http://127.0.0.1:9200/test/_cat/indices?v" 2>/dev/null
+    curl -XPOST "http://127.0.0.1:9200/test/_refresh" 2>/dev/null
 
     total_hit 1 test $((2*$N))
     total_hit 2 test $((2*$N))
@@ -194,11 +212,14 @@ if [ -z "$TRAVIS" ]; then
     repair 3 test
     repair 4 test
     repair 5 test
+    sleep 2
+
     cleanup 1
     cleanup 2
     cleanup 3
     cleanup 4
     cleanup 5
+    sleep 2
     doc_count test $((6*$N))
 
     total_hit 1 test $((2*$N))
@@ -219,6 +240,7 @@ if [ -z "$TRAVIS" ]; then
     repair 3 test2
     repair 4 test2
     repair 5 test2
+    sleep 2
 
     total_hit 1 test2 $N
     total_hit 2 test2 $N
