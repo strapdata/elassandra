@@ -186,7 +186,7 @@ Dynamic settings are only relevant for clusters, indexes and document type setti
 Sizing and tuning
 -----------------
 
-Basically, Elassandra requires much CPU than the standalone Cassandra or Elasticsearch and Elassandra write throughput should be half the Cassandra write throughput if you index all columns. If you only index a subset of co
+Basically, Elassandra requires more CPU than the standalone Cassandra or Elasticsearch and Elassandra write throughput should be half the Cassandra write throughput if you index all columns. If you only index a subset of co
 lumns, write performance would be better.
 
 Design recommendations :
