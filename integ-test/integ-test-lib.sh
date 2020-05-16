@@ -85,6 +85,8 @@ scale_up() {
   # add a new node with bootstrap to true
   ccm add -b -r "500${IDX}" --data-center $2 --rack $3 -t "127.0.0.${IDX}" --binary-itf "127.0.0.${IDX}:9042" -l "127.0.0.${IDX}:7000" -j "710${IDX}" node$IDX
   start_node $IDX
+  sleep 1
+  check_cluster_status $IDX "green"
 }
 
 stop_node() {
