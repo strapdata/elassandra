@@ -22,6 +22,7 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.UUIDGen;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -36,8 +37,10 @@ import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
-import java.util.Locale;
-import java.util.Map;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.*;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -103,6 +106,33 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
 
         for(long i=20; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+    }
+
+    @Test
+    public void timestampMessagePartitionFunctionTest() throws Exception {
+        process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
+        process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, \"@timestamp\" timestamp, primary key (name))");
+
+        for(int i=0; i < 12; i++) {
+            String indexName = String.format(Locale.ROOT, "mms_dev_logs-2020.%02d", i);
+            createIndex(indexName, Settings.builder().put("index.keyspace","ks")
+                .put("index.partition_function", "toMonthIndex mms_dev_logs-{0,date,yyyy.MM} @timestamp")
+                .put("index.partition_function_class", "MessageFormatPartitionFunction")
+                .build(),"t1", discoverMapping("t1"));
+            ensureGreen(indexName);
+        }
+        for(int i=1; i < 12; i++) {
+            for(int j=0; j < 10; j++) {
+                LocalDateTime d = LocalDateTime.of(2020, i, 20, 0, 0);
+                long epochMs = d.toInstant(ZoneOffset.ofTotalSeconds(0)).toEpochMilli();
+                process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, \"@timestamp\") VALUES ('name%d-%d', ?)", i, j), new Date(epochMs));
+            }
+        }
+
+        for(long i=1; i < 12; i++) {
+            String indexName = String.format(Locale.ROOT, "mms_dev_logs-2020.%02d", i);
+            assertThat(client().prepareSearch().setIndices(indexName).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(10L));
+        }
     }
 
     @Test
