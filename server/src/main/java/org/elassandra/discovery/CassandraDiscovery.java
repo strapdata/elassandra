@@ -859,25 +859,37 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     attrs.put("dc", localDc);
                     attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
                     logger.debug("Add node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                            hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                        hostId, NetworkAddress.format(endpoint),
+                        internalIp == null ? null : NetworkAddress.format(internalIp),
+                        rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                        status);
                     return new DiscoveryNode(buildNodeName(endpoint), hostId, addr, attrs, CASSANDRA_ROLES, Version.CURRENT, status);
                 } else {
                     if (!dn.getName().equals(buildNodeName(endpoint)) || !dn.getInetAddress().equals(Boolean.getBoolean("es.use_internal_address") ? internalIp : rpcAddress)) {
                         // update DiscoveryNode IP if endpoint is ALIVE
                         if (status.equals(DiscoveryNodeStatus.ALIVE)) {
                             logger.debug("Update node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                                    hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                                hostId, NetworkAddress.format(endpoint),
+                                internalIp == null ? null : NetworkAddress.format(internalIp),
+                                rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                                status);
                             return new DiscoveryNode(buildNodeName(endpoint), hostId, addr, dn.getAttributes(), CASSANDRA_ROLES, Version.CURRENT, status);
                         } else {
                             logger.debug("Ignoring node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                                    hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                                hostId, NetworkAddress.format(endpoint),
+                                internalIp == null ? null : NetworkAddress.format(internalIp),
+                                rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                                status);
                             return dn;
                         }
                     }
                     if (!dn.getStatus().equals(status)) {
                         // update DiscoverNode status
                         logger.debug("Update node host_id={} endpoint={} internal_ip={} rpc_address={}, status={}",
-                                hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                            hostId, NetworkAddress.format(endpoint),
+                            internalIp == null ? null : NetworkAddress.format(internalIp),
+                            rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                            status);
                         return new DiscoveryNode(buildNodeName(endpoint),hostId, addr, dn.getAttributes(), CASSANDRA_ROLES, Version.CURRENT, status);
                     }
                     return dn;
