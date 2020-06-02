@@ -353,7 +353,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     attrs.put("dc", localDc);
                     attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
                     logger.debug("Add node NEW host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                        hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                        hostId, NetworkAddress.format(endpoint),
+                        internalIp == null ? null : NetworkAddress.format(internalIp),
+                        rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                        status);
                     gn = new GossipNode(new DiscoveryNode(buildNodeName(endpoint), hostId.toString(), addr, attrs, CASSANDRA_ROLES, Version.CURRENT, status), x1Map);
                     nodeUpdate = true;
                     routingUpdate = status.isAlive();
@@ -363,7 +366,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     // status changed
                     if (!dn.getStatus().equals(status)) {
                         logger.debug("Update node STATUS host_id={} endpoint={} internal_ip={} rpc_address={}, status={}",
-                            hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                            hostId, NetworkAddress.format(endpoint),
+                            internalIp == null ? null : NetworkAddress.format(internalIp),
+                            rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                            status);
                         dn.status(status);
                         nodeUpdate = true;
                         routingUpdate = true;
@@ -379,12 +385,18 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         // update DiscoveryNode IP if endpoint is ALIVE
                         if (status.equals(DiscoveryNodeStatus.ALIVE)) {
                             logger.debug("Update node IP host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                                hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                                hostId, NetworkAddress.format(endpoint),
+                                internalIp == null ? null : NetworkAddress.format(internalIp),
+                                rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                                status);
                             gn = new GossipNode(new DiscoveryNode(buildNodeName(endpoint), hostId.toString(), addr, dn.getAttributes(), CASSANDRA_ROLES, Version.CURRENT, status), gn.shardRoutingStateMap);
                             nodeUpdate = true;
                         } else {
                             logger.debug("Ignoring node DEAD host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
-                                hostId, NetworkAddress.format(endpoint), NetworkAddress.format(internalIp), NetworkAddress.format(rpcAddress), status);
+                                hostId, NetworkAddress.format(endpoint),
+                                internalIp == null ? null : NetworkAddress.format(internalIp),
+                                rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
+                                status);
                         }
                     }
 
