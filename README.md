@@ -1,5 +1,4 @@
-# Elassandra [![Build Status](https://travis-ci.org/strapdata/elassandra.svg)](https://travis-ci.org/strapdata/elassandra)[![Documentation Status](https://readthedocs.org/projects/elassandra/badge/?version=latest)](https://elassandra.readthedocs.io/en/latest/?badge=latest)
-
+# Elassandra [![Build Status](https://travis-ci.org/strapdata/elassandra.svg)](https://travis-ci.org/strapdata/elassandra) [![Documentation Status](https://readthedocs.org/projects/elassandra/badge/?version=latest)](https://elassandra.readthedocs.io/en/latest/?badge=latest) [![Twitter](https://img.shields.io/twitter/follow/strapdataio?style=social)](https://twitter.com/strapdataio)
 
 ![Elassandra Logo](elassandra-logo.png)
 
