@@ -590,28 +590,20 @@ public class ElasticSecondaryIndex implements Index {
 
         @Override
         public void finalize() {
-            // reverse the order of docs for nested docs support, parent should be last
             if (!finalized) {
-                if (this.documents.size() > 1) {
-                    Collections.reverse(this.documents);
+                docsReversed = true;
+                if (this.indexInfo.indexService.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_5_0)) {
+                    /**
+                     * For indices created on or after {@link Version#V_6_5_0} we preserve the order
+                     * of the children while ensuring that parents appear after them.
+                     */
+                    List<Document> newDocs = reorderParent(documents);
+                    documents.clear();
+                    documents.addAll(newDocs);
+                } else {
+                    // reverse the order of docs for nested docs support, parent should be last
+                    Collections.reverse(documents);
                 }
-                // apply doc boost
-                /*
-                if (docBoost() != 1.0f) {
-                    final Set<String> encounteredFields = Sets.newHashSet();
-                    for (ParseContext.Document doc : this.documents) {
-                        encounteredFields.clear();
-                        for (IndexableField field : doc) {
-                            if (field.fieldType().indexOptions() != IndexOptions.NONE && !field.fieldType().omitNorms()) {
-                                if (!encounteredFields.contains(field.name())) {
-                                    ((Field) field).setBoost(docBoost() * field.boost());
-                                    encounteredFields.add(field.name());
-                                }
-                            }
-                        }
-                    }
-                }
-                */
             }
         }
 

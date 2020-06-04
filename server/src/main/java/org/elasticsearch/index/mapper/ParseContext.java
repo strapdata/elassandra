@@ -480,23 +480,6 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
             }
         }
 
-        /**
-         * Returns a copy of the provided {@link List} where parent documents appear
-         * after their children.
-         */
-        private List<Document> reorderParent(List<Document> docs) {
-            List<Document> newDocs = new ArrayList<>(docs.size());
-            LinkedList<Document> parents = new LinkedList<>();
-            for (Document doc : docs) {
-                while (parents.peek() != doc.getParent()){
-                    newDocs.add(parents.poll());
-                }
-                parents.add(0, doc);
-            }
-            newDocs.addAll(parents);
-            return newDocs;
-        }
-
         @Override
         public Iterator<Document> iterator() {
             return documents.iterator();
@@ -512,6 +495,23 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
         public Collection<String> getIgnoredFields() {
             return Collections.unmodifiableCollection(ignoredFields);
         }
+    }
+
+    /**
+     * Returns a copy of the provided {@link List} where parent documents appear
+     * after their children.
+     */
+    protected List<Document> reorderParent(List<Document> docs) {
+        List<Document> newDocs = new ArrayList<>(docs.size());
+        LinkedList<Document> parents = new LinkedList<>();
+        for (Document doc : docs) {
+            while (parents.peek() != doc.getParent()){
+                newDocs.add(parents.poll());
+            }
+            parents.add(0, doc);
+        }
+        newDocs.addAll(parents);
+        return newDocs;
     }
 
     /**
