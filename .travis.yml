@@ -112,8 +112,7 @@ deploy:
   # publish snapshot artifact in strapdata nexus
   - provider: script
     skip_cleanup: true
-    script:
-       - JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+    script: JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
     on:
       tags: false
       repo: strapdata/elassandra
@@ -121,8 +120,7 @@ deploy:
   # publish release artifact in strapdata nexus
   - provider: script
     skip_cleanup: true
-    script:
-       - JAVA_HOME=$JAVA9_HOME ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
+    script: JAVA_HOME=$JAVA9_HOME ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
     on:
       tags: true
       repo: strapdata/elassandra
@@ -130,11 +128,9 @@ deploy:
   # publish RMP+DEB in strapdata repo
   - provider: script
     skip_cleanup: true
-    script:
-       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})"
-       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+    script: >-
+      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
+      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
     on:
       tags: true
       repo: strapdata/elassandra
-
-
