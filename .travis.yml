@@ -77,6 +77,7 @@ before_deploy:
   - export ZIPBALL=$(ls distribution/archives/zip/build/distributions/elassandra-*.zip)
   - export DEBPKG=$(ls distribution/packages/deb/build/distributions/elassandra_*.deb)
   - export RPMPKG=$(ls distribution/packages/rpm/build/distributions/elassandra-*.rpm)
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
 deploy:
   # build github release
@@ -99,24 +100,11 @@ deploy:
   # build, test and push docker hub images
   - provider: script
     skip_cleanup: true
-    script:
-      - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-      - ELASSANDRA_TAG=${TRAVIS_TAG:1} ./ci/docker.sh
+    script: ELASSANDRA_TAG=${TRAVIS_TAG:1} ./ci/docker.sh
     on:
       tags: true
       branch: v6.8.4-strapdata
       repo: strapdata/elassandra
-
-  # build, test and push docker images in strapdata registry on elassandra-rc
-  - provider: script
-    skip_cleanup: true
-    script:
-      - echo "$STRAPDATA_REGISTRY_PASSWORD" | docker login -u $STRAPDATA_REGISTRY_USERNAME $STRAPDATA_REGISTRY --password-stdin
-      - DOCKER_REGISTRY=$STRAPDATA_REGISTRY ELASSANDRA_TAG=${TRAVIS_TAG:1}-rc ./ci/docker.sh
-    on:
-      tags: true
-      branch: v6.8.4-strapdata
-      repo: strapdata/elassandra-rc
 
   # bump and push to gke marketplace repo, build gke images, push to gcr.io
   # - provider: script
@@ -129,8 +117,7 @@ deploy:
   # publish snapshot artifact in private strapdata nexus
   - provider: script
     skip_cleanup: true
-    script:
-       - JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+    script: JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
     on:
       tags: false
       branch: v6.8.4-strapdata
@@ -139,12 +126,11 @@ deploy:
   # publish release artifact in strapdata nexus
   - provider: script
     skip_cleanup: true
-    script:
-       - JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
-       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})"
-       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+    script: >-
+      JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/" &&
+      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
+      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
     on:
       tags: true
       branch: v6.8.4-strapdata
       repo: strapdata/elassandra
-
