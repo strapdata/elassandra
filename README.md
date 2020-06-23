@@ -15,7 +15,7 @@ Project documentation is available at [doc.elassandra.io](http://doc.elassandra.
 
 ## Benefits of Elassandra
 
-For Cassandra users, elassandra provides Elasticsearch features :
+For Cassandra users, Elassandra provides the following features for integration with Elasticsearch:
 * Cassandra updates are indexed in Elasticsearch.
 * Full-text and spatial search on your Cassandra data.
 * Real-time aggregation (does not require Spark or Hadoop to GROUP BY)
@@ -26,15 +26,15 @@ For Cassandra users, elassandra provides Elasticsearch features :
 * Manage concurrent elasticsearch mappings changes and applies batched atomic CQL schema changes.
 * Support [Elasticsearch ingest processors](https://www.elastic.co/guide/en/elasticsearch/reference/master/ingest.html) allowing to transform input data.
 
-For Elasticsearch users, elassandra provides useful features :
+For Elasticsearch users, Elassandra provides these useful features due to integration with Cassandra:
 * Elassandra is masterless. Cluster state is managed through [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Elassandra is a sharded multi-master database, where Elasticsearch is sharded master-slave. Thus, Elassandra has no Single Point Of Write, helping to achieve high availability.
 * Elassandra inherits Cassandra data repair mechanisms (hinted handoff, read repair and nodetool repair) providing support for **cross datacenter replication**.
 * When adding a node to an Elassandra cluster, only data pulled from existing nodes are re-indexed in Elasticsearch.
 * Cassandra could be your unique datastore for indexed and non-indexed data. It's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a NoSQL database and Elasticsearch.
-* Write operations are not restricted to one primary shard, but distributed across all Cassandra nodes in a virtual datacenter. The number of shards does not limit your write throughput. Adding elassandra nodes increases both read and write throughput.
+* Write operations are not restricted to one primary shard, but distributed across all Cassandra nodes in a virtual datacenter. The number of shards does not limit your write throughput. Adding Elassandra nodes increases both read and write throughput.
 * Elasticsearch indices can be replicated among many Cassandra datacenters, allowing write to the closest datacenter and search globally.
-* The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware, providing automatic load-balancing and failover.
+* The [Cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware, providing automatic load-balancing and failover.
 * Elassandra efficiently stores Elasticsearch documents in binary SSTables without any JSON overhead.
 
 ## Quick start
@@ -48,17 +48,17 @@ For Elasticsearch users, elassandra provides useful features :
 
 #### Elassandra 6.2.3.25+
 
-Elassandra use the Cassandra GOSSIP protocol to manage the Elasticsearch routing table and Elassandra 6.2.3.25+ add support for compression of
+Elassandra uses the Cassandra GOSSIP protocol to manage the Elasticsearch routing table. As of Elassandra 6.2.3.25+, we have added support for the compression of
 the X1 application state to increase the maxmimum number of Elasticsearch indices. For backward compatibility, the compression is disabled by default,
 but once all your nodes are upgraded into version 6.2.3.25+, you should enable the X1 compression by adding **-Des.compress_x1=true** in your **conf/jvm.options** and rolling restart all nodes.
-Nodes running version 6.2.3.25+ are able to read compressed and not compressed X1.
+Nodes running version 6.2.3.25+ are able to read both compressed and not compressed X1.
 
 #### Elassandra 6.2.3.21+
 
 Before version 6.2.3.21, the Cassandra replication factor for the **elasic_admin** keyspace (and elastic_admin_[datacenter.group]) was automatically adjusted to the 
-number of nodes of the datacenter. Since version 6.2.3.21 and because it has a performance impact on large clusters, it's now up to your Elassandra administrator to 
+number of nodes of the datacenter. Because the replication factor setting has a performance impact on large clusters, we wanted to make this more customizable, and as of version 6.2.3.21 we are leaving this up to your Elassandra administrator to 
 properly adjust the replication factor for this keyspace. Keep in mind that Elasticsearch mapping updates rely on a PAXOS transaction that requires QUORUM nodes to succeed, 
-so replication factor should be at least 3 on each datacenter.
+so the replication factor should be at least 3 on each datacenter.
 
 #### Elassandra 6.2.3.19+
 
@@ -72,9 +72,9 @@ which node has updated the mapping, when and for which reason.
 
 #### Elassandra 6.2.3.8+
 
-Elassandra 6.2.3.8+ now fully manages the elasticsearch mapping in the CQL schema through the use of CQL schema extensions (see *system_schema.tables*, column *extensions*). These table extensions and the CQL schema updates resulting of elasticsearch index creation/modification are updated in batched atomic schema updates to ensure consistency when concurrent updates occurs. Moreover, these extensions are stored in binary and support partial updates to be more efficient. As the result, the elasticsearch mapping is not more stored in the *elastic_admin.metadata* table. 
+Elassandra 6.2.3.8+ now fully manages the elasticsearch mapping in the CQL schema through the use of CQL schema extensions (see *system_schema.tables*, column *extensions*). These table extensions and the CQL schema updates resulting of elasticsearch index creation/modification are updated in batched atomic schema updates to ensure consistency when concurrent updates occurs. Moreover, these extensions are stored in binary and support partial updates to be more efficient. As a result, the elasticsearch mapping is not more stored in the *elastic_admin.metadata* table. 
 
-WARNING: During the rolling upgrade, elasticserach mapping changes are not propagated between nodes running the new and the old versions, so don't change your mapping while you're upgrading. Once all your nodes have been upgraded to 6.2.3.8+ and validated, apply the following CQL statements to remove useless elasticsearch metadata:
+WARNING: During the rolling upgrade, elasticsearch mapping changes are not propagated between nodes running the new and the old versions, so don't change your mapping while you're upgrading. Once all your nodes have been upgraded to 6.2.3.8+ and validated, apply the following CQL statements to remove useless elasticsearch metadata:
 ```bash
 ALTER TABLE elastic_admin.metadata DROP metadata;
 ALTER TABLE elastic_admin.metadata WITH comment = '';
@@ -207,7 +207,7 @@ And here is a sample response :
 ## Support
 
  * Commercial support is available through [Strapdata](http://www.strapdata.com/).
- * Community support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
+ * Community support available via [Elassandra Google groups](https://groups.google.com/forum/#!forum/elassandra).
  * Post feature requests and bugs on https://github.com/strapdata/elassandra/issues
 
 ## License
