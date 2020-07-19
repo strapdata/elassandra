@@ -668,7 +668,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             if (logger.isTraceEnabled())
                 logger.trace("Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
 
-            gossipCluster.update(endpoint, epState, "onChange-" + endpoint, true);
+            VersionedValue vv = epState.getApplicationState(ApplicationState.STATUS);
+            if (vv == null || !"removed".equals(vv.value)) {
+                gossipCluster.update(endpoint, epState, "onChange-" + endpoint, true);
+            }
         }
 
         // self status update.
