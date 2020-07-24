@@ -39,6 +39,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.query.InnerHitBuilder;
 import org.elasticsearch.index.query.Operator;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
@@ -608,7 +609,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     // ./gradlew :server:test -Dtests.seed=1EC932B209B2305F -Dtests.security.manager=false -Dtests.locale=fur-IT -Dtests.timezone=America/Whitehorse -Dtests.class=org.elassandra.CqlTypesTests  -Dtests.method="testCoercWithDynamicMapping"
     //#323
     @Test
-    public void testCoercWithDynamicMapping() throws Exception {
+    public void testCoerceWithDynamicMapping() throws Exception {
         createIndex("test");
         ensureGreen("test");
 
@@ -772,6 +773,84 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
         process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'galaxie', date : '2018-02-01 11:51:00'}} WHERE make='ford';");
         assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+    }
+
+    // Nested objects with inner hits query returns "extracted source isn't an object or an array" (#346)
+    public void testNestedInnerHit() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("properties")
+            .startObject("parent-nested")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("nested-object1")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("field1")
+            .field("type", "text")
+            .endObject()
+            .startObject("field2")
+            .field("type", "text")
+            .startObject("fields")
+            .startObject("keyword")
+            .field("type", "keyword")
+            .field("ignore_above", 256)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject("nested-object2")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("field2")
+            .field("type", "text")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test-issue-index").addMapping("nested_data", mapping));
+        ensureGreen("test-issue-index");
+
+        assertThat(client().prepareIndex("test-issue-index", "nested_data","0")
+            .setSource("{\n" +
+                "  \"parent-nested\": [\n" +
+                "    {\n" +
+                "      \"nested-object1\": [\n" +
+                "        {\n" +
+                "          \"field1\": \"hello\"\n" +
+                "        }\n" +
+                "      ]\n" +
+                "    },\n" +
+                "    {\n" +
+                "      \"nested-object2\": {\n" +
+                "      }\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        SearchResponse resp = client().prepareSearch().setIndices("test-issue-index")
+            .setTypes("nested_data")
+            .setQuery(QueryBuilders.boolQuery().must(
+                QueryBuilders.nestedQuery(
+                    "parent-nested.nested-object1",
+                    QueryBuilders.boolQuery().should(
+                        QueryBuilders.boolQuery().must(QueryBuilders.matchQuery("parent-nested.nested-object1.field1", "hello"))
+                    ),
+                    ScoreMode.Avg
+                )
+                    .innerHit(new InnerHitBuilder())
+            ))
+            .setFetchSource(true)
+            .get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        System.out.println("hits[0]=" + resp.getHits().getAt(0).getSourceAsString());
+        System.out.println("inner_hits="+resp.getHits().getAt(0).getInnerHits());
+        assertNotNull(resp.getHits().getAt(0).getInnerHits());
     }
 
     // #315 Nested objects' fields not indexed
