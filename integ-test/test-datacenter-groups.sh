@@ -93,12 +93,14 @@ curl -H 'Content-Type: application/json' -XPUT "http://127.0.0.3:9200/log-dc3?wa
 
 # write on 2 dc synchronously
 curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.2:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
-curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
-curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
+sleep 2 # wait for asynchronous DC replication
 
+curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
+curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
 curl -XPOST "http://127.0.0.3:9200/log-dc3/_refresh"
 total_hit 3 log-dc3 3
 
+sleep 2 # wait for asynchronous DC replication
 curl -XPOST "http://127.0.0.2:9200/log-dc3/_refresh"
 total_hit 2 log-dc3 3
 
