@@ -745,24 +745,21 @@ public abstract class TransportReplicationAction<
 
             // resolve all derived request fields, so we can route and apply it
             resolveRequest(indexMetaData, request);
-            //assert request.shardId() != null : "request shardId must be set in resolveRequest";
-            //assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
+            assert request.shardId() != null : "request shardId must be set in resolveRequest";
+            assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
 
-            /* No need for retry in ELassandra.
             final ShardRouting primary = primary(state);
+            /* No need for retry in ELassandra.
             if (retryIfUnavailable(state, primary)) {
                 return;
             }
             */
             final DiscoveryNode node = state.nodes().getLocalNode();
-            performLocalAction(state, null, node, indexMetaData);
-            /*
             if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                 performLocalAction(state, primary, node, indexMetaData);
             } else {
-                performRemoteAction(state, primary, node);
+                performRemoteAction(state, primary, state.nodes().get(primary.currentNodeId()));
             }
-            */
         }
 
         private void performLocalAction(ClusterState state, ShardRouting primary, DiscoveryNode node, IndexMetaData indexMetaData) {
