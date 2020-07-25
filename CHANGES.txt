@@ -1,3 +1,7 @@
+6.8.4.8 - 2020-07-26
+  * Fix flush, refresh and close distributed actions
+  * Fix open index from a node that is not the last master node.
+
 6.8.4.7 - 2020-07-23
   * Fixup node update for removed nodes
   * Fixup routing table update
