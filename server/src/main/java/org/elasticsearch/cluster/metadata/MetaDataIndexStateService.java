@@ -433,7 +433,7 @@ public class MetaDataIndexStateService {
         logger.info(() -> new ParameterizedMessage("opening indices [{}]",
             String.join(",", indicesToOpen.stream().map(i -> (CharSequence) i.getIndex().toString())::iterator)));
 
-        final MetaData.Builder metadata = MetaData.builder(currentState.metaData());
+        final MetaData.Builder metadata = MetaData.builder(currentState.metaData()).setClusterUuid();
         final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
         final Version minIndexCompatibilityVersion = currentState.getNodes().getMaxNodeVersion().minimumIndexCompatibilityVersion();
 
