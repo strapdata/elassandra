@@ -1,3 +1,7 @@
+6.2.3.30 - 2020-07-27
+  * Fix flush, refresh and close distributed actions
+  * Fix open index from a node that is not the last master node.
+
 6.2.3.29 - 2020-07-23
   * Fix NPE when network config is wrong
 
