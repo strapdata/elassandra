@@ -89,7 +89,7 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
     }
 
     protected boolean localExecute(Request request) {
-        return false;
+        return true;
     }
 
     protected abstract ClusterBlockException checkBlock(Request request, ClusterState state);

@@ -209,7 +209,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                 logger.info("opening indices [{}]", indicesAsString);
 
-                MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
+                MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
                 ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder()
                         .blocks(currentState.blocks());
                 final Version minIndexCompatibilityVersion = currentState.getNodes().getMaxNodeVersion()
