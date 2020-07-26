@@ -78,11 +78,6 @@ ccm add -b -r "5003" --data-center DC3 --rack r1 -t "127.0.0.3" --binary-itf "12
 add_datacenter_tags 3 DC23
 start_node 3
 
-curl -H 'Content-Type: application/json' -XPUT "http://127.0.0.3:9200/log-dc3?wait_for_active_shards=1" -d'{"settings":{"index.datacenter_tag":"DC23","index.replication":"DC2:1,DC3:1"}}' 2>/dev/null
-curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.2:9200/log-dc3/doc" -d'{"foo":"bar"}' 2>/dev/null
-curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc" -d'{"foo":"bar"}' 2>/dev/null
-curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc" -d'{"foo":"bar"}' 2>/dev/null
-
 check_cluster_status 1 "green"
 check_cluster_status 2 "green"
 check_cluster_status 3 "green"
@@ -91,21 +86,17 @@ total_hit 1 test $N
 total_hit 2 test $N
 total_hit 3 test $N
 
-
-
 total_hit 1 log-dc1 $N
 total_hit 2 log-dc2 1
 
 curl -H 'Content-Type: application/json' -XPUT "http://127.0.0.3:9200/log-dc3?wait_for_active_shards=1" -d'{"settings":{"index.datacenter_tag":"DC23","index.replication":"DC2:1,DC3:1"}}' 2>/dev/null
-sleep2
+sleep 2
 
-# write on 2 dc synchronously
 curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.2:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
 sleep 2 # wait for asynchronous DC replication
 
 curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
 curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.3:9200/log-dc3/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
-
 curl -XPOST "http://127.0.0.3:9200/log-dc3/_refresh"
 total_hit 3 log-dc3 3
 
