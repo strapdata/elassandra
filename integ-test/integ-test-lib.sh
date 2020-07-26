@@ -22,12 +22,14 @@ test_end() {
 
 finish() {
   echo "ERROR occurs, test failed"
-  for i in {1..5};
-  do
-    if [ -f ~/.ccm/$cluster_name/node$i/logs/system.log ]; then
-       cat ~/.ccm/$cluster_name/node$i/logs/system.log
-    fi
-  done
+  if [ ! -z "$TRAVIS" ]; then
+    for i in {1..5};
+    do
+      if [ -f ~/.ccm/$cluster_name/node$i/logs/system.log ]; then
+         cat ~/.ccm/$cluster_name/node$i/logs/system.log
+      fi
+    done
+  fi
   exit 1
 }
 
