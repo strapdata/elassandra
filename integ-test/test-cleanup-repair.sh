@@ -115,9 +115,9 @@ total_hit 1 testrefresh 1
 # test close/open
 curl -XPOST "http://127.0.0.1:9200/testrefresh/_close"
 curl -XPOST "http://127.0.0.2:9200/testrefresh/_open"
+sleep 2
 total_hit 1 testrefresh 1
 
-curl -XPUT  "http://127.0.0.1:9200/test/_refresh"
 echo "### Repair test, with RF=3"
 alter_rf test 3
 repair 1 test
@@ -181,6 +181,7 @@ total_hit 2 test $((2*$N))
 total_hit 3 test $((2*$N))
 total_hit 4 test $((2*$N))
 
+# Travis cannot run 5 nodes test
 if [ -z "$TRAVIS" ]; then
     echo "### Scale up 5 nodes, with RF=2"
     scale_up 5 DC1 r2
@@ -269,7 +270,37 @@ if [ -z "$TRAVIS" ]; then
 
     # restart node 2 to avoid schema mismatch
     start_node 2
+
+    # remove node5
+    ccm node5 decommission
 fi
+
+# test node decommission
+ccm node4 decommission
+check_cluster_status 1 "green"
+check_cluster_status 2 "green"
+check_cluster_status 3 "green"
+total_hit 1 test2 $N
+total_hit 2 test2 $N
+total_hit 3 test2 $N
+
+# test node removenode
+HOST_ID3=$(ccm node1 nodetool status | awk '/127.0.0.3/ { print $7 }')
+ccm node3 stop
+ccm node1 nodetool removenode $HOST_ID3
+check_cluster_status 1 "green"
+check_cluster_status 2 "green"
+total_hit 1 test2 $N
+total_hit 2 test2 $N
+
+# restart a new node3 reusing the same IP address
+
+ccm node3 remove
+scale_up 3 DC1 r3
+check_cluster_status 3 "green"
+total_hit 1 test2 $N
+total_hit 2 test2 $N
+total_hit 3 test2 $N
 
 delete_index test
 delete_index test2

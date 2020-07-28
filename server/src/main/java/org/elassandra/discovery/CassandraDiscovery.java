@@ -200,6 +200,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
 
     public class GossipNode {
+        boolean removed = false;
         DiscoveryNode discoveryNode;
         Map<String,ShardRoutingState> shardRoutingStateMap;
 
@@ -223,13 +224,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             }
 
             GossipNode other = (GossipNode) obj;
-            return Objects.equals(discoveryNode, other.discoveryNode) &&
+            return Objects.equals(removed, other.removed) &&
+                Objects.equals(discoveryNode, other.discoveryNode) &&
                 Objects.equals(this.shardRoutingStateMap, other.shardRoutingStateMap);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(discoveryNode, shardRoutingStateMap);
+            return Objects.hash(removed, discoveryNode, shardRoutingStateMap);
         }
     }
 
@@ -242,7 +244,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 .masterNodeId(SystemKeyspace.getLocalHostId().toString())
                 .add(localNode());
             for (GossipNode node : remoteMembers.values()) {
-                nodesBuilder.add(node.discoveryNode);
+                // filter removed nodes, but keep it to avoid detecting them as new nodes.
+                if (!node.removed) {
+                    nodesBuilder.add(node.discoveryNode);
+                }
             }
             return nodesBuilder.build();
         }
@@ -288,7 +293,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
 
         public GossipNode remove(final UUID hostId, final String source) {
-            GossipNode oldGossipNode = remoteMembers.remove(hostId);
+            GossipNode oldGossipNode = remoteMembers.computeIfPresent(hostId, (k,v) -> {
+                v.removed = true;
+                return v;
+            });
             if (oldGossipNode != null) {
                 clusterService.submitStateUpdateTask(source, new RoutingTableUpdateTask(true),
                     routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
@@ -301,6 +309,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 return;
 
             UUID hostId = UUID.fromString(epState.getApplicationState(ApplicationState.HOST_ID).value);
+
+            VersionedValue vv = epState.getApplicationState(ApplicationState.STATUS);
+            if (vv != null && ("removed".startsWith(vv.value) || "LEFT".startsWith(vv.value))) {
+                remove(hostId, "remove-" + endpoint);
+                return;
+            }
+
             String x1 = null;
             try {
                 x1 = epState.getApplicationState(ApplicationState.X1) == null ? null : uncompressIfGZipped(epState.getApplicationState(ApplicationState.X1).value);
@@ -663,15 +678,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue versionValue) {
         EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
+        traceEpState(endpoint, epState);
+
         String hostId = epState.getApplicationState(ApplicationState.HOST_ID).value;
         if (hostId != null && isMember(endpoint)) {
             if (logger.isTraceEnabled())
                 logger.trace("Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
 
-            VersionedValue vv = epState.getApplicationState(ApplicationState.STATUS);
-            if (vv == null || !"removed".equals(vv.value)) {
-                gossipCluster.update(endpoint, epState, "onChange-" + endpoint, true);
-            }
+            gossipCluster.update(endpoint, epState, "onChange-" + endpoint, true);
         }
 
         // self status update.
@@ -766,11 +780,18 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             } catch (IOException e) {
             }
         } else if (isMember(endpoint)) {
-            DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
-            if (removedNode != null  && !this.localNode().getId().equals(removedNode.getId())) {
-                logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
-                notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
-                gossipCluster.remove(removedNode.uuid(), "onRemove-"+endpoint.getHostAddress());
+            EndpointState ep = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
+            if (ep != null) {
+                VersionedValue vv = ep.getApplicationState(ApplicationState.HOST_ID);
+                if (vv != null && vv.value != null) {
+                    String hostId = vv.value;
+                    UUID hostUuid = UUID.fromString(vv.value);
+                    if (!localNode().getId().equals(hostId) && gossipCluster.contains(hostUuid)) {
+                        logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, hostId);
+                        notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
+                        gossipCluster.remove(hostUuid, "onRemove-" + endpoint.getHostAddress());
+                    }
+                }
             }
         }
     }
@@ -942,7 +963,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         if (epState.getApplicationState(ApplicationState.X2) == null) {
             return DiscoveryNodeStatus.DISABLED;
         }
-        if (VersionedValue.STATUS_NORMAL.equals(epState.getStatus())) {
+        if (VersionedValue.STATUS_NORMAL.equals(epState.getStatus()) ||
+            VersionedValue.STATUS_LEAVING.equals(epState.getStatus())  ||
+            VersionedValue.STATUS_MOVING.equals(epState.getStatus())
+        ) {
             return DiscoveryNodeStatus.ALIVE;
         }
         return DiscoveryNodeStatus.DEAD;

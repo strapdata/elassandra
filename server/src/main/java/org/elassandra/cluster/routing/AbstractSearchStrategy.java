@@ -197,7 +197,9 @@ public abstract class AbstractSearchStrategy {
         }
 
         public boolean isRoutable(ClusterState state) {
-           return VersionedValue.STATUS_NORMAL.equals(StorageService.instance.getOperationMode()) && !state.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
+            return (VersionedValue.STATUS_NORMAL.equals(StorageService.instance.getOperationMode()) ||
+                VersionedValue.STATUS_LEAVING.equals(StorageService.instance.getOperationMode())) &&
+                !state.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
         }
 
         public ShardRoutingState getShardRoutingState(DiscoveryNode node) {

@@ -72,7 +72,7 @@ start_node() {
 
 check_cluster_status() {
   IDX=$1
-  STATUS=$(curl "http://127.0.0.${IDX}:9200/_cluster/health?wait_for_status=green&wait_for_active_shards=all&timeout=60s&pretty&local=true" | jq -r '.status')
+  STATUS=$(curl "http://127.0.0.${IDX}:9200/_cluster/health?wait_for_status=green&wait_for_active_shards=all&timeout=60s&pretty&local=true" 2>/dev/null | jq -r '.status')
   echo "Node node$IDX status=$STATUS"
   if [ "$STATUS" != "$2" ]; then
     return 1
