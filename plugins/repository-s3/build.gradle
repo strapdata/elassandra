@@ -43,13 +43,13 @@ dependencies {
   compile "commons-logging:commons-logging:${versions.commonslogging}"
   compile "commons-codec:commons-codec:${versions.commonscodec}"
   compile "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
-  compile 'com.fasterxml.jackson.core:jackson-databind:2.8.11.3'
+  compile 'com.fasterxml.jackson.core:jackson-databind:2.8.11.6'
   compile "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}"
   compile "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:${versions.jackson}"
   compile "joda-time:joda-time:${versions.joda}"
 
   // HACK: javax.xml.bind was removed from default modules in java 9, so we pull the api in here,
-  // and whitelist this hack in JarHell 
+  // and whitelist this hack in JarHell
   compile 'javax.xml.bind:jaxb-api:2.2.2'
 }
 
@@ -322,10 +322,10 @@ if (useFixture) {
 
 thirdPartyAudit.ignoreMissingClasses (
   // classes are missing
-  'javax.servlet.ServletContextEvent', 
-  'javax.servlet.ServletContextListener', 
-  'org.apache.avalon.framework.logger.Logger', 
-  'org.apache.log.Hierarchy', 
+  'javax.servlet.ServletContextEvent',
+  'javax.servlet.ServletContextListener',
+  'org.apache.avalon.framework.logger.Logger',
+  'org.apache.log.Hierarchy',
   'org.apache.log.Logger',
   'software.amazon.ion.IonReader',
   'software.amazon.ion.IonSystem',

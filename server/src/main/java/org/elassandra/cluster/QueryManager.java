@@ -19,6 +19,8 @@
 
 package org.elassandra.cluster;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.google.common.collect.ImmutableList;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -40,8 +42,6 @@ import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
-import org.codehaus.jackson.JsonParseException;
-import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elassandra.index.mapper.internal.HostFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
@@ -123,7 +123,7 @@ public class QueryManager extends AbstractComponent {
             SchemaManager.typeToCfName(indexShard.mapperService().keyspace(), uid.type()));
         String id = uid.id();
         if (id.startsWith("[") && id.endsWith("]")) {
-            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             return metadata.clusteringColumns().size() > 0 && elements.length == metadata.partitionKeyColumns().size();
         } else {
@@ -266,7 +266,7 @@ public class QueryManager extends AbstractComponent {
 
         if (id.startsWith("[") && id.endsWith("]")) {
             // _id is JSON array of values.
-            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             Object[] values = (map != null) ? null : new Object[elements.length];
             String[] names = (map != null) ? null : new String[elements.length];
@@ -303,7 +303,7 @@ public class QueryManager extends AbstractComponent {
         int ptLen = partitionColumns.size();
         if (routing.startsWith("[") && routing.endsWith("]")) {
             // _routing is JSON array of values.
-            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Object[] elements = jsonMapper.readValue(routing, Object[].class);
             Object[] values = new Object[elements.length];
             String[] names = new String[elements.length];

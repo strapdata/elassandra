@@ -16,6 +16,8 @@
 package org.elasticsearch.cluster.service;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimap;
@@ -60,8 +62,6 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
-import org.codehaus.jackson.JsonGenerationException;
-import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.QueryManager;

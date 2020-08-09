@@ -44,11 +44,11 @@ if (!isEclipse && !isIdea) {
       }
     }
   }
-  
+
   configurations {
     java9Compile.extendsFrom(compile)
   }
-  
+
   dependencies {
     java9Compile sourceSets.main.output
   }
@@ -109,11 +109,11 @@ dependencies {
   // json and yaml
   compile "org.yaml:snakeyaml:${versions.snakeyaml}"
   compile "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
+  compile "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}"
+  compile "com.fasterxml.jackson.core:jackson-databind:${versions.jacksondatabind}"
   compile "com.fasterxml.jackson.dataformat:jackson-dataformat-smile:${versions.jackson}"
   compile "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${versions.jackson}"
   compile "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:${versions.jackson}"
-  compile "org.codehaus.jackson:jackson-core-asl:1.9.13"
-  compile "org.codehaus.jackson:jackson-mapper-asl:1.9.13"
 
   // percentiles aggregation
   compile 'com.tdunning:t-digest:3.2'
@@ -144,17 +144,21 @@ dependencies {
 
   testCompile 'com.google.jimfs:jimfs:1.1'
   compile 'com.google.guava:guava:19.0'
-  
+
   // Elassandra add-ons
   runtime("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
     exclude group:'net.java.dev.jna', module:'jna'
     exclude group:'org.ow2.asm', module:'asm'
     exclude group:'org.apache.commons', module:'commons-lang3'
     exclude group:'org.slf4j', module:'slf4j-api'
-    exclude group:'org.yaml', module:'snakeyaml' 
-    exclude group:'io.netty', module:'netty-all' 
-    exclude group:'joda-time', module:'joda-time' 
-    exclude group:'commons-codec', module:'commons-codec' 
+    exclude group:'org.yaml', module:'snakeyaml'
+    exclude group:'io.netty', module:'netty-all'
+    exclude group:'joda-time', module:'joda-time'
+    exclude group:'commons-codec', module:'commons-codec'
+    // use the elasticsearch version rather than version 2.9.10
+    exclude group:'com.fasterxml.jackson.core', module:'jackson-core'
+    exclude group:'com.fasterxml.jackson.core', module:'jackson-databind'
+    exclude group:'com.fasterxml.jackson.core', module:'jackson-annotations'
   }
 
   compile group: 'org.antlr', name: 'antlr', version: '3.5.2'
@@ -440,7 +444,7 @@ if (isEclipse == false || project.path == ":server-tests") {
   check.dependsOn integTest
   integTest.mustRunAfter test
   task internalClusterTest {
-     dependsOn integTest    
+     dependsOn integTest
   }
 }
 
