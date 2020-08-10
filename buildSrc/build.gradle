@@ -116,7 +116,7 @@ dependencies {
   compile localGroovy()
   compile "com.carrotsearch.randomizedtesting:junit4-ant:${props.getProperty('randomizedrunner')}"
   compile "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${props.getProperty('randomizedrunner')}"
-  
+
   compile 'com.netflix.nebula:gradle-extra-configurations-plugin:3.0.3'
   compile 'com.netflix.nebula:nebula-publishing-plugin:4.4.4'
   compile 'com.netflix.nebula:gradle-info-plugin:3.0.3'
@@ -182,8 +182,8 @@ if (project != rootProject) {
   thirdPartyAudit.enabled = false
 
   unitTest {
-    // The test task is configured to runtimeJava version, but build-tools doesn't 
-    // have to support those. 
+    // The test task is configured to runtimeJava version, but build-tools doesn't
+    // have to support those.
     jvm = "${project.compilerJavaHome}/bin/java"
   }
 
@@ -263,7 +263,7 @@ class VersionPropertiesLoader {
     if (elasticsearch == null) {
       throw new IllegalStateException("Elasticsearch version is missing from properties.")
     }
-    if (elasticsearch.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]") == false) {
+    if (elasticsearch.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+") == false) {
       throw new IllegalStateException(
               "Expected elasticsearch version to be numbers only of the form  X.Y.Z but it was: " +
                       elasticsearch
