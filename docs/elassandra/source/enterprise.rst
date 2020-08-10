@@ -648,7 +648,7 @@ Then configure Grafana with a Prometheus datasource and build your Elassandra da
 Monitoring Elassandra through the Prometheus Operator
 .....................................................
 
-When running Elassandra Enterprise under Kubernetes, you can use the Prometheus-Operator <https://coreos.com/operators/prometheus/docs/latest/>`_ to monitor your Elassandra PODs.
+When running Elassandra Enterprise under Kubernetes, you can use the `Prometheus-Operator <https://coreos.com/operators/prometheus/docs/latest/>`_ to monitor your Elassandra PODs.
 
 Add the following annotations to automatically scrap Elassandra pods:
 
@@ -665,7 +665,7 @@ Add the following kubernetes labels to your Elassandra PODs:
    cluster: "my-cluster"
    datacenter: "DC1"
 
-If you deploy Elassandra through the Elassandra HELM chart <https://github.com/strapdata/helm-charts>`_, the **release** label is automatically added to your Elassandra PODs.
+If you deploy Elassandra through the `Elassandra HELM chart <https://github.com/strapdata/helm-charts>`_, the **release** label is automatically added to your Elassandra PODs.
 
 In your Prometheus Operator (in HELM values.yaml, prometheusSpec.additionalScrapeConfigs), add the following scrap config to properly map Kubernetes pod's labels to Grafana dashboard variables:
 
@@ -817,7 +817,7 @@ Elassandra nodes certificates should have the following X509 v3 extensions to wo
    ]
 
 Moreover, SSL/TLS hostname verification requires that the requested hostname matches the certificate subject common name,
-or at least one of the Subject Alternative Names`<https://en.wikipedia.org/wiki/Subject_Alternative_Name>`_ (SANs). In order
+or at least one of the `Subject Alternative Names <https://en.wikipedia.org/wiki/Subject_Alternative_Name>`_ (SANs). In order
 to use the same certificate for all elassandra nodes, add a wildcard SAN to your certificate and use a matching
 DNS name to connect to the elassandra nodes. Usually, **localhost** and **127.0.0.1** are also included in the SANs to allow
 local connections.
@@ -863,7 +863,7 @@ If client encryption is enabled in your **conf/cassandra.yaml**, and ``require_c
       "https_cipher" : "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
    }
 
-When using curl, if NSS database <https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS>`_ is installed on your system, make sure your private key file is PKCS1 (or RSA).
+When using curl, if `NSS database <https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS>`_ is installed on your system, make sure your private key file is PKCS1 (or RSA).
 If it's not the case, convert your PKCS8 private key file to a PKCS1 with the following command:
 
 .. code::
