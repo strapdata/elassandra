@@ -152,6 +152,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         final LongSupplier globalCheckpointSupplier, final LongSupplier primaryTermSupplier) throws IOException {
         super(config.getShardId(), config.getIndexSettings());
         this.deletionPolicy = deletionPolicy;
+        bigArrays = config.getBigArrays();
         ReadWriteLock rwl = new ReentrantReadWriteLock();
         readLock = new ReleasableLock(rwl.readLock());
         writeLock = new ReleasableLock(rwl.writeLock());
