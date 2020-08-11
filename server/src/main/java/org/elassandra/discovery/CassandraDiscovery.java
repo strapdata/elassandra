@@ -885,7 +885,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     }
                 }
                 String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(localShardStateMap);
-                logger.debug("Compress X1 = {}", gzip);
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(gzip ? compress(newValue) : newValue));
             } else {
                 // publish an empty map, so other nodes will see local shards UNASSIGNED.
