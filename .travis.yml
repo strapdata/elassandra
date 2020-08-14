@@ -121,7 +121,6 @@ deploy:
     on:
       tags: false
       branch: v6.8.4-strapdata
-      repo: strapdata/elassandra
 
   # publish release artifact in strapdata nexus
   - provider: script
