@@ -18,7 +18,7 @@ To enable Elasticsearch query over CQL:
 .. code::
 
    JVM_OPTS="$JVM_OPTS -Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
-   
+
 * Add a dummy column ``es_query`` to your cassandra table.
 * Add a dummy column ``es_options`` to your cassandra table if you need to specify some specific options like target index names.
 
@@ -35,7 +35,7 @@ Then you can query the associated Elasticsearch index directly into a CQL SELECT
 .. code::
 
    cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}';
-   
+
     _id | foo
    -----+-------
       2 |  bar2
@@ -48,10 +48,10 @@ Then you can query the associated Elasticsearch index directly into a CQL SELECT
      25 | bar25
      26 | bar26
      27 | bar27
-   
+
    (10 rows)
 
-If your target index does not have the same name as the underlying keyspace one, you can specify targeted indices names in ``es_options``, 
+If your target index does not have the same name as the underlying keyspace one, you can specify targeted indices names in ``es_options``,
 that must be followed by ``ALLOW FILTERING``.
 
 .. code::
@@ -61,28 +61,28 @@ that must be followed by ``ALLOW FILTERING``.
 Paging
 ......
 
-By default, when the Cassandra driver paging is enabled, the CQL query handler open a 
-`scroll cursor <https://www.elastic.co/guide/en/elasticsearch/reference/current/search-request-scroll.html>`_ to retrieve 
-large numbers of results (or even all results). The scroll context is automatically released when fetching the last page. 
+By default, when the Cassandra driver paging is enabled, the CQL query handler open a
+`scroll cursor <https://www.elastic.co/guide/en/elasticsearch/reference/current/search-request-scroll.html>`_ to retrieve
+large numbers of results (or even all results). The scroll context is automatically released when fetching the last page.
 The default scoll timeout is 60 seconds.
 
 If you only need the first N results, use the CQL LIMIT clause as shown below. When the resquested LIMIT is
-lower than the CQL page size (default is 5000, see `CQL Paging <https://docs.datastax.com/en/developer/java-driver/3.5/manual/paging/>`_), 
+lower than the CQL page size (default is 5000, see `CQL Paging <https://docs.datastax.com/en/developer/java-driver/3.5/manual/paging/>`_),
 the CQL query handler does not open a scroll cursor, but just set the elasticsearch query size.
 
 .. code::
 
    cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' LIMIT 3;
-   
+
     _id | foo
    -----+-------
       2 |  bar2
      20 | bar20
      22 | bar22
-   
+
    (3 rows)
 
-If CQL paging is disabled and the LIMIT clause is absent, the CQL query handler execute a search request with an Elasticsearch query size limited to 10000, 
+If CQL paging is disabled and the LIMIT clause is absent, the CQL query handler execute a search request with an Elasticsearch query size limited to 10000,
 as the default `index.max_result_window`` (see dynamic index settings <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#dynamic-index-settings>`_)
 
 Routing
@@ -93,11 +93,11 @@ If all partition key columns are set in the where clause, the Elasticsearch quer
 .. code::
 
    cassandra@cqlsh> SELECT "_id", foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' AND "_id"='2';
-   
+
     _id | foo
    -----+------
       2 | bar2
-   
+
    (1 rows)
 
 CQL Functions
@@ -108,7 +108,7 @@ Cassandra functions and User Defined Functions can be used in the CQL projection
 .. code::
 
    cassandra@cqlsh> SELECT "_id",foo,token("_id"),writetime(foo) FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}';
-   
+
     _id | foo   | system.token(_id)    | writetime(foo)
    -----+-------+----------------------+------------------
       2 |  bar2 |  5293579765126103566 | 1509275059354000
@@ -121,7 +121,7 @@ Cassandra functions and User Defined Functions can be used in the CQL projection
      25 | bar25 |  2509205981756244107 | 1509275059625000
      26 | bar26 | -6132418777949225301 | 1509275059633000
      27 | bar27 |  9060526884622895268 | 1509275059645000
-   
+
    (10 rows)
 
 Elasticsearch aggregations through CQL
@@ -136,17 +136,17 @@ Elassandra supports the elasticsearch aggregation only in **regular CQL statemen
 .. code::
 
    cassandra@cqlsh> SELECT * FROM twitter2.doc WHERE es_query='{"aggs":{"sales_per_month":{"date_histogram":{"field":"post_date","interval":"day"},"aggs":{"sales":{"sum":{"field":"price"}}}}}}';
-   
+
     sales_per_month.key             | sales_per_month.count | sales_per_month.sales.sum
    ---------------------------------+-----------------------+---------------------------
     2017-10-04 00:00:00.000000+0000 |                     3 |                        30
     2017-10-05 00:00:00.000000+0000 |                     1 |                        10
     2017-10-06 00:00:00.000000+0000 |                     1 |                        10
     2017-10-07 00:00:00.000000+0000 |                     3 |                        30
-   
+
    (4 rows)
 
-When requesting multiple sibling aggregations, the tree result is flattened. 
+When requesting multiple sibling aggregations, the tree result is flattened.
 In the following example, there are two top level aggregations named *sales_per_month* and *sum_monthly_sales*.
 
 .. code::
@@ -156,14 +156,14 @@ In the following example, there are two top level aggregations named *sales_per_
          "sum_monthly_sales":{"sum_bucket":{"buckets_path":"sales_per_month>sales"}}}}';
 
     sales_per_month.key             | sales_per_month.count | sales_per_month.sales.sum | sum_monthly_sales.value
-   
+
    ---------------------------------+-----------------------+---------------------------+-------------------------
     2017-10-04 00:00:00.000000+0000 |                     3 |                        30 |                    null
     2017-10-05 00:00:00.000000+0000 |                     1 |                        10 |                    null
     2017-10-06 00:00:00.000000+0000 |                     1 |                        10 |                    null
     2017-10-07 00:00:00.000000+0000 |                     3 |                        30 |                    null
                                null |                  null |                      null |                      80
-   
+
    (5 rows)
 
 .. note::
@@ -172,6 +172,19 @@ In the following example, there are two top level aggregations named *sales_per_
 
    ex :  select * from twitter2.doc where es_query='{"size":0, "aggs":{{"sales":{"stats":{"field":"price"}}}}}' and es_options='indices=twitter2;json=true'
 
+.. note::
+
+    Elassandra only supports the following aggregation types over CQL:
+
+    * `Term aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-bucket-terms-aggregation.html>`_
+    * `Histogram aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-bucket-histogram-aggregation.html>`_
+    * `Date Histogram aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-bucket-datehistogram-aggregation.html>`_
+    * `Percentiles aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-metrics-percentile-aggregation.html>`_
+    * `Sum aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-metrics-sum-aggregation.html>`_
+    * `Avg aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-metrics-avg-aggregation.html>`_
+    * `Min aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-metrics-min-aggregation.html>`_
+    * `Max aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-metrics-max-aggregation.html>`_
+    * `Stats aggregation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/search-aggregations-metrics-stats-aggregation.html>`_
 
 Distributed Elasticsearch aggregation with Apache Spark
 .......................................................
@@ -222,7 +235,7 @@ In the following example, we used dummy columns count2, dc_power1, dc_power2 and
    }"""
    val t = sc.cassandraTable("iot", "sensors").select("ts","count","dc_power","dc_power1","dc_power2","count2","dc_power3").where("es_query='"+query+"'");
    t.collect.foreach(println)
-   
+
    CassandraRow{ts: 2017-12-31 00:00:00+0100, count: 204, dc_power: 0.0, dc_power1: null, dc_power2: 305.64675177506786, count2: 17, dc_power3: 0.0}
    CassandraRow{ts: 2017-12-31 00:00:00+0100, count: 204, dc_power: 0.0, dc_power1: null, dc_power2: 308.4126297573829, count2: 17, dc_power3: 0.0}
    CassandraRow{ts: 2017-12-31 00:00:00+0100, count: 204, dc_power: 0.0, dc_power1: null, dc_power2: 311.4319809865401, count2: 17, dc_power3: 0.0}
@@ -239,7 +252,7 @@ Alternatively, you can request an Apache Spark to get the aggregation results as
 
    val t = sc.cassandraTable("iot", "sensors").select("es_query").where("es_query='"+query+"' AND es_options='json=true'");
    t.collect.foreach(println)
-   
+
    CassandraRow{es_query: {"key_as_string":"2017-12-30T23:00:00.000Z","key":1514674800000,"doc_count":204,"agg_irradiance":{"value":0.0},"water1":{"doc_count_error_upper_bound":0,"sum_other_doc_count":34,"buckets":[{"key":305.64675177506786,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":308.4126297573829,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":311.4319809865401,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":314.7328283387269,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":318.34321582364055,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":322.28910238170704,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":326.59122459682067,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":331.2608198139219,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":336.2944302705681,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":341.6684918842001,"doc_count":17,"dc_power_agg":{"value":0.0}}]},"agg_conso":{"value":0.0}}}
    CassandraRow{es_query: {"key_as_string":"2017-12-31T00:00:00.000Z","key":1514678400000,"doc_count":204,"agg_irradiance":{"value":0.0},"water1":{"doc_count_error_upper_bound":0,"sum_other_doc_count":34,"buckets":[{"key":5.253033308292965,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":11.17937932261813,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":16.9088341251606,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":22.361824055627704,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":27.483980631203153,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":32.24594386978638,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":36.63970141314307,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":40.673315954868855,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":44.36558478428467,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":47.74149653565296,"doc_count":17,"dc_power_agg":{"value":0.0}}]},"agg_conso":{"value":0.0}}}
    CassandraRow{es_query: {"key_as_string":"2017-12-31T01:00:00.000Z","key":1514682000000,"doc_count":204,"agg_irradiance":{"value":0.0},"water1":{"doc_count_error_upper_bound":0,"sum_other_doc_count":34,"buckets":[{"key":53.65569068831377,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":56.249279017946265,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":58.63483107417463,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":60.835352658997266,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":62.87149505671871,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":64.76161651252164,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":66.52193854036197,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":68.16674119813763,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":69.70857084793244,"doc_count":17,"dc_power_agg":{"value":0.0}},{"key":71.15844512445423,"doc_count":17,"dc_power_agg":{"value":0.0}}]},"agg_conso":{"value":0.0}}}
@@ -247,7 +260,7 @@ Alternatively, you can request an Apache Spark to get the aggregation results as
 CQL Driver integration
 ......................
 
-In order to build elasticsearch queries, `query builders and helpers <https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-query-builders.html>`_ from elastic can be 
+In order to build elasticsearch queries, `query builders and helpers <https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-query-builders.html>`_ from elastic can be
 used as shown bellow and use it in a CQL prepared statement.
 
 .. code::
@@ -255,7 +268,7 @@ used as shown bellow and use it in a CQL prepared statement.
    String esQuery = new SearchSourceBuilder().query(QueryBuilders.termQuery("user", "vince")).toString(ToXContent.EMPTY_PARAMS);
    ResultSet results = cassandraCQLUnit.session.execute("SELECT * FROM users WHERE es_query = ? ALLOW FILTERING", esQuery);
 
-You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total**, **_shards.successful**, **_shards.skipped** and **_shards.failed** 
+You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total**, **_shards.successful**, **_shards.skipped** and **_shards.failed**
 from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
 
 .. code-block:: java
@@ -276,7 +289,7 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
             shardFailed = payload.get("_shards.failed").getInt();
         }
    }
-   
+
    String esQuery = "{\"query\":{\"match_all\":{}}}";
    ResultSet rs = session.execute("SELECT * FROM ks.table WHERE es_query=?", esQuery);
    IncomingPayload payload = new IncomingPayload(rs.getExecutionInfo().getIncomingPayload());
@@ -325,7 +338,7 @@ you can use `Cassandra tracing <https://docs.datastax.com/en/cql/3.3/cql/cql_ref
    cassandra@cqlsh> tracing on;
    Now Tracing is enabled
    cassandra@cqlsh> SELECT * FROM twitter2.doc WHERE es_query='{"query":{"match_all":{}}}';
-   
+
     _id | es_options | es_query | message                                          | post_date                           | price | user
    -----+------------+----------+--------------------------------------------------+-------------------------------------+-------+------------
       2 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-04 14:12:00.000000+0000'] |  [10] | ['Poulpy']
@@ -336,11 +349,11 @@ you can use `Cassandra tracing <https://docs.datastax.com/en/cql/3.3/cql/cql_ref
       4 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-05 13:12:00.000000+0000'] |  [10] | ['Poulpy']
       6 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-07 13:12:00.000000+0000'] |  [10] | ['Poulpy']
       7 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-07 15:12:00.000000+0000'] |  [10] | ['Poulpy']
-   
+
    (8 rows)
-   
+
    Tracing session: 817762d0-c6d8-11e7-80c9-cf9ea31c7788
-   
+
     activity                                                                                                           | timestamp                  | source    | source_elapsed | client
    --------------------------------------------------------------------------------------------------------------------+----------------------------+-----------+----------------+-----------
                                                                                                    Elasticsearch query | 2017-11-11 13:04:44.544000 | 127.0.0.1 |              0 | 127.0.0.1
@@ -407,12 +420,12 @@ You can then retreive tracing information stored into the system_traces keyspace
     7c49dae0-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    20002 | {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc WHERE es_query=''{"query":{"match_all":{}}}'';', 'serial_consistency_level': 'SERIAL'} | Elasticsearch query | 2017-11-11 12:04:35.856000+0000
     6786c2d0-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    16426 |                                              {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc ;', 'serial_consistency_level': 'SERIAL'} |  Execute CQL3 query | 2017-11-11 12:04:01.021000+0000
     6b49e550-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    14129 |                                               {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc;', 'serial_consistency_level': 'SERIAL'} |  Execute CQL3 query | 2017-11-11 12:04:07.333000+0000
-   
+
    (4 rows)
    cassandra@cqlsh> SHOW SESSION 817762d0-c6d8-11e7-80c9-cf9ea31c7788;
 
    Tracing session: 817762d0-c6d8-11e7-80c9-cf9ea31c7788
-   
+
     activity                                                                                                           | timestamp                  | source    | source_elapsed | client
    --------------------------------------------------------------------------------------------------------------------+----------------------------+-----------+----------------+-----------
                                                                                                    Elasticsearch query | 2017-11-11 13:04:44.544000 | 127.0.0.1 |              0 | 127.0.0.1
