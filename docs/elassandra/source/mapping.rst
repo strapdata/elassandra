@@ -95,7 +95,7 @@ Elassandra adds some Elasticsearch mapper extensions in order to map Elasticsear
 For more information about Cassandra collection types and compound primary key, see `CQL Collections <http://cassandra.apache.org/doc/latest/cql/types.html?highlight=collection#collections>`_ and `Compound keys <https://docs.datastax.com/en/cql/3.1/cql/ddl/ddl_compound_keys_c.html>`_.
 
 .. TIP::
-   
+
    For every update, Elassandra reads for missing fields in order to build a full Elasticsearch document. If some fields are backed by Cassandra collections (map, set or list), Elassandra
    force a read before index even if all fields are provided in the Cassandra upsert operation. For this reason, when you don't need multi-valued fields, use fields backed by
    native Cassandra types rather than the default list to avoid a read-before-index when inserting a row containing all its mandatory elasticsearch fields.
@@ -107,9 +107,9 @@ Elassandra supports `Elasticsearch multi-fields <https://www.elastic.co/guide/en
 
 .. TIP::
 
-  Indexing a wrong datatype into a field may throws an exception by default and reject the whole document. 
+  Indexing a wrong datatype into a field may throws an exception by default and reject the whole document.
   The `ignore_malformed parameter <https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html>`_, if set to true, allows the exception to be ignored.
-  This parameter can also be set at the `index level <https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html#ignore-malformed-setting>`_, 
+  This parameter can also be set at the `index level <https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html#ignore-malformed-setting>`_,
   to allow to ignore malformed content globally across all mapping types.
 
 Bi-directional mapping
@@ -135,7 +135,7 @@ Columns matching the provided regular expression are mapped as Elasticsearch fie
    }'
 
 
-By default, all text columns are mapped with ``"type":"keyword"``. Moreover, the discovery regular expression must exclude explicitly mapped fields to avoid inconsistent mapping. 
+By default, all text columns are mapped with ``"type":"keyword"``. Moreover, the discovery regular expression must exclude explicitly mapped fields to avoid inconsistent mapping.
 The following mapping update allows to discover all fields but the one named "name" and explicitly define its mapping.
 
 .. code::
@@ -155,7 +155,7 @@ The following mapping update allows to discover all fields but the one named "na
 .. TIP::
    When creating the first Elasticsearch index for a given Cassandra table, Elassandra creates a custom CQL secondary index.
    Cassandra automatically builds indices on all nodes for all existing data. Subsequent CQL inserts or updates are automatically indexed in Elasticsearch.
-   
+
    If you then add a second or additional Elasticsearch indices to an existing indexed table, existing data are not automatically re-indexed because Cassandra has already indexed existing data.
    Instead of re-inserting your data into the Cassandra table, you may want to use the following command to force a Cassandra index rebuild. It will re-index your Cassandra table to all associated Elasticsearch indices :
 
@@ -174,7 +174,7 @@ Meta-Fields
 * ``_index`` is the index name mapped to the underlying Cassandra keyspace name (dash [-] and dot[.] are automatically replaced by underscore [_]).
 * ``_type`` is the document type name mapped to the underlying Cassandra table name (dash [-] and dot[.] are automatically replaced by underscore [_]). Since Elasticsearch 6.x, there is only one type per index.
 * ``_id`` is the document ID is a string representation of the primary key of the underlying Cassandra table. Single field primary key is converted to a string, compound primary key is converted into a JSON array converted to a string. For example, if your primary key is a string and a number, you will get ``_id`` = [\"003011FAEF2E\",1493502420000]. To get such a document by its ``_id``, you need to properly escape brackets and double-quotes as shown below.
-   
+
 .. code::
 
    get 'twitter/tweet/\["003011FAEF2E",1493502420000\]?pretty'
@@ -188,7 +188,7 @@ Meta-Fields
        ...
      }
    }
-       
+
 * ``_source`` is the indexed JSON document. By default, *_source* is disabled in Elassandra, meaning that *_source* is rebuild from the underlying Cassandra columns. If *_source* is enabled (see `Mapping _source field <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html>`_) ELassandra stores documents indexed by with the Elasticsearch API in a dedicated Cassandra text column named *_source*. This allows to retreive the orginal JSON document for `GeoShape Query <https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-geo-shape-query.html>`_.
 * ``_routing`` is valued with a string representation of the partition key of the underlying Cassandra table. Single partition key is converted into a string, compound partition key is converted into a JSON array. Specifying ``_routing`` on get, index or delete operations is useless, since the partition key is included in ``_id``. On search operations, Elassandra computes the Cassandra token associated with ``_routing`` for the search type, and reduces the search only to a Cassandra node hosting the token. (WARNING: Without any search types, Elassandra cannot compute the Cassandra token and returns with an error **all shards failed**).
 * ``_ttl``  and ``_timestamp`` are mapped to the Cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_ in Elassandra 5.x. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular Cassandra column if there is one in the underlying table. Moreover, when indexing a document through the Elasticsearch API, all Cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
@@ -290,7 +290,7 @@ All these indices will be mapped to the keyspace **logs**, and all columns of th
 
 .. TIP::
    Partition function is executed for each indexed document, so if write throughput is a concern, you should choose an efficient implementation class.
-    
+
 How To remove an old index.
 
 .. code::
@@ -310,7 +310,7 @@ In conjunction with partitioned indices, you can use a virtual index to share th
 
 |
 
-A newly created index inherits the mapping created for other partitioned indices, and this drastically reduce the volume of 
+A newly created index inherits the mapping created for other partitioned indices, and this drastically reduce the volume of
 Elasticsearch mappings stored in the CQL schema, and the number of mapping update across the cluster.
 
 In order to create a partitioned index using the mapping of the virtual index, just add the name of the virtual index name as show bellow.
@@ -384,25 +384,25 @@ The resulting Cassandra user defined types and table.
 Dynamic mapping of Cassandra Map
 --------------------------------
 
-By default, nested document are be mapped to `User Defined Type <https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_. 
-You can also use a CQL `map <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane>`_ 
+By default, nested document are be mapped to `User Defined Type <https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_.
+For top level fields only, you can also use a CQL `map <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane>`_
 having a *text* key and a value of native or UDT type (using a collection in a map is not supported by Cassandra).
 
 With ``cql_struct=map``, each new key in the map involves an Elasticsearch mapping update (and a PAXOS transaction) to declare the key as a new field.
-Obviously, don't use such mapping when keys are versatile. 
+Obviously, don't use such mapping when keys are versatile.
 
-.. WARNING: 
+.. WARNING:
 
-	Creating an index with including a  ``cql_struct=map`` when the underlying Cassandra map contains some data cause 
-	a mapping update timeout on the coordinator node, a dead-lock because the CQL schema cannot be updated while updating a row. In such case,
-	create the index without indexing the Cassandra map column, then update the mapping to add the map column and rebuild the index.
+    Creating an index with including a  ``cql_struct=map`` when the underlying Cassandra map contains some data cause
+    a mapping update timeout on the coordinator node, a dead-lock because the CQL schema cannot be updated while updating a row. In such case,
+    create the index without indexing the Cassandra map column, then update the mapping to add the map column and rebuild the index.
 
 With ``cql_struct=opaque_map``, Elassandra silently index each key as an Elasticsearch field, but does not update the mapping, which is far more efficient when using versatile keys.
 Every sub-fields (or every entry in the map) have the same type defined by the pseudo field name ``_key`` in the mapping.
-These fields are searchable, except with `query string queries <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/query-dsl-query-string-query.html>`_ 
+These fields are searchable, except with `query string queries <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/query-dsl-query-string-query.html>`_
 because Elasticsearch cannot lookup fields in the mapping.
 
-Finaly, when discovering the mapping from the CQL schema, Cassandra maps columns are mapped to an ``opaque_map`` by default. Adding explicit sub-fields to 
+Finally, when discovering the mapping from the CQL schema, Cassandra maps columns are mapped to an ``opaque_map`` by default. Adding explicit sub-fields to
 an ``opaque_map`` is still possible if you need to make these fields visible to Kibana for example.
 
 In the following example, each new key entry in the map *attrs* is mapped as field.
@@ -421,28 +421,28 @@ Create the type mapping from the Cassandra table and search for the *bob* entry.
 
 .. code::
 
-   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter" -d '{ 
-   	"mappings": {
-   	   "user" : { "discover" : "^((?!attrs).*)" }
-   	 }
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter" -d '{
+       "mappings": {
+          "user" : { "discover" : "^((?!attrs).*)" }
+        }
    }'
-   
+
    curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter/_mapping/user?pretty=true' -d'{
-	   "properties" : {
-	     "attrs" : {
-	       "type" : "nested",
-	       "cql_struct" : "map",
-	       "cql_collection" : "singleton",
-	       "properties" : {
-	         "email" : {
-	           "type" : "keyword"
-	         },
-	         "firstname" : {
-	           "type" : "keyword"
-	         }
-	       }
-	     }
-	   }
+    "properties" : {
+        "attrs" : {
+           "type" : "nested",
+           "cql_struct" : "map",
+           "cql_collection" : "singleton",
+           "properties" : {
+             "email" : {
+               "type" : "keyword"
+             },
+             "firstname" : {
+               "type" : "keyword"
+             }
+           }
+         }
+       }
    }'
 
    curl -XGET "http://localhost:9200/twitter/user/bob?pretty=true"
@@ -495,53 +495,53 @@ With an ``opaque_map``, search results are the same, and the Elasticsearch mappi
 
 .. code::
 
-   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter" -d '{ 
-   	"mappings": {
-   	   "user" : { "discover" : ".*" }
-   	 }
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter" -d '{
+       "mappings": {
+          "user" : { "discover" : ".*" }
+        }
    }'
-   
+
    curl -XGET "http://localhost:9200/twitter?pretty"
    {
-	  "twitter" : {
-	    "aliases" : { },
-	    "mappings" : {
-	      "user" : {
-	        "properties" : {
-	          "attrs" : {
-	            "type" : "nested",
-	            "cql_struct" : "opaque_map",
-	            "cql_collection" : "singleton",
-	            "properties" : {
-	              "_key" : {
-	                "type" : "keyword",
-	                "cql_collection" : "singleton"
-	              }
-	            }
-	          },
-	          "name" : {
-	            "type" : "keyword",
-	            "cql_collection" : "singleton",
-	            "cql_partition_key" : true,
-	            "cql_primary_key_order" : 0
-	          }
-	        }
-	      }
-	    },
-	    "settings" : {
-	      "index" : {
-	        "creation_date" : "1568060813134",
-	        "number_of_shards" : "1",
-	        "number_of_replicas" : "0",
-	        "uuid" : "ZyolrbP9Qjm8rNezne7wUw",
-	        "version" : {
-	          "created" : "6020399"
-	        },
-	        "provided_name" : "twitter"
-	      }
-	    }
-	  }
-	}
+      "twitter" : {
+        "aliases" : { },
+        "mappings" : {
+          "user" : {
+            "properties" : {
+              "attrs" : {
+                "type" : "nested",
+                "cql_struct" : "opaque_map",
+                "cql_collection" : "singleton",
+                "properties" : {
+                  "_key" : {
+                    "type" : "keyword",
+                    "cql_collection" : "singleton"
+                  }
+                }
+              },
+              "name" : {
+                "type" : "keyword",
+                "cql_collection" : "singleton",
+                "cql_partition_key" : true,
+                "cql_primary_key_order" : 0
+              }
+            }
+          }
+        },
+        "settings" : {
+          "index" : {
+            "creation_date" : "1568060813134",
+            "number_of_shards" : "1",
+            "number_of_replicas" : "0",
+            "uuid" : "ZyolrbP9Qjm8rNezne7wUw",
+            "version" : {
+              "created" : "6020399"
+            },
+            "provided_name" : "twitter"
+          }
+        }
+      }
+    }
 
 
 Dynamic Template with Dynamic Mapping
@@ -553,14 +553,14 @@ Dynamic templates can be used when creating a dynamic field from a Cassandra map
 
    "mappings" : {
          "event_test" : {
-            "dynamic_templates": [ { 
-                   		"strings_template": {
-                         	"match": "strings.*", 
-                         	"mapping": { 
-                         		"type": "keyword"
-                         	}
-                   		}
-                   	} ],
+            "dynamic_templates": [ {
+                           "strings_template": {
+                             "match": "strings.*",
+                             "mapping": {
+                                 "type": "keyword"
+                             }
+                           }
+                       } ],
            "properties" : {
              "id" : {
                "type" : "keyword",
@@ -576,7 +576,7 @@ Dynamic templates can be used when creating a dynamic field from a Cassandra map
            }
          }
    }
-   
+
 A new entry *key1* in the underlying Cassandra map will have the following mapping:
 
 .. code::
@@ -610,17 +610,17 @@ A new entry *key1* in the underlying Cassandra map will have the following mappi
               }
             }
           }
-        }    
+        }
 
 Note that because doc_values is true by default for a keyword field, it does not appear in the mapping.
 
 Parent-Child Relationship
 -------------------------
 
-.. WARNING:: 
+.. WARNING::
 
-   Parent child is supported in Elassandra 5.x. 
-   
+   Parent child is supported in Elassandra 5.x.
+
 Elassandra supports `parent-child relationship <https://www.elastic.co/guide/en/elasticsearch/guide/current/parent-child.html>`_ when parent and child documents
 are located on the same Cassandra node. This condition is met :
 
@@ -825,16 +825,16 @@ Be careful, if ``index_static_document`` = *false* and ``index_static_only`` = *
 
 .. code::
 
-   curl -XPUT -H 'Content-Type: application/json' http://localhost:9200/test/_mapping/timeseries -d '{ 
-      "timeseries": { 
-         "discover" : ".*", 
-         "_meta": { 
-            "index_static_document":true, 
-            "index_static_columns":true 
-         } 
+   curl -XPUT -H 'Content-Type: application/json' http://localhost:9200/test/_mapping/timeseries -d '{
+      "timeseries": {
+         "discover" : ".*",
+         "_meta": {
+            "index_static_document":true,
+            "index_static_columns":true
+         }
       }
    }'
-   
+
 Elassandra as a JSON-REST Gateway
 ---------------------------------
 
@@ -850,12 +850,12 @@ In this case, the mapping may be use to cast types or format date fields, as sho
        size list<bigint>,
        user list<text>
    )
-   
-   curl -XPUT -H 'Content-Type: application/json' "http://$NODE:9200/twitter/" -d'{ 
-      "settings":{ "index.mapper.dynamic":false }, 
+
+   curl -XPUT -H 'Content-Type: application/json' "http://$NODE:9200/twitter/" -d'{
+      "settings":{ "index.mapper.dynamic":false },
       "mappings":{
-         "tweet":{ 
-            "properties":{ 
+         "tweet":{
+            "properties":{
                "size":     { "type":"long", "index":"no" },
                "post_date":{ "type":"date", "index":"no", "format" : "strict_date_optional_time||epoch_millis" }
              }
@@ -874,7 +874,7 @@ As a result, you can index, get or delete a Cassandra row, including any column 
         "size": 50
    }'
    {"_index":"twitter","_type":"tweet","_id":"1","_version":1,"_shards":{"total":1,"successful":1,"failed":0},"created":true}
-   
+
    $ curl -XGET "http://localhost:9200/twitter/tweet/1?pretty=true&fields=message,user,size,post_date'
    {
      "_index" : "twitter",
@@ -934,7 +934,7 @@ The second processor set the document ``_id`` to a JSON compound key including t
          }
        }
      ]
-   }' 
+   }'
 
 Because timeuuid is not an Elasticsearch type, this CQL type must be explicit in the Elasticsearch mapping using the ``cql_type`` field mapping attribute to replace the default ``timestamp`` by ``timeuuid``. This can be acheived with an elasticsearch template.
 Your mapping must also defines a Cassandra partition key as text, and a clustering key of type ``timeuuid``.
@@ -952,13 +952,13 @@ In the following example, we have 1000 accounts documents in a keyspace with RF=
    curl -XGET "http://$NODE:9200/accounts/_search?pretty=true&size=0" -d'{
            "aggs" : {
                "tokens" : {
-                   "token_range" : { 
-                      "field" : "_token" 
+                   "token_range" : {
+                      "field" : "_token"
                     },
-                   "aggs": { 
-                      "nodes" : { 
-                         "terms" : { "field" : "_host" } 
-                      } 
+                   "aggs": {
+                      "nodes" : {
+                         "terms" : { "field" : "_host" }
+                      }
                    }
                }
            }
