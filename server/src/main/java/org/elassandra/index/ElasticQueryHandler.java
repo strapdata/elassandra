@@ -116,7 +116,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * CQL query processor executing Elasticsearch query.
  */
-public class ElasticQueryHandler extends QueryProcessor  {
+public class ElasticQueryHandler extends QueryProcessor {
 
     private static final Logger logger = Loggers.getLogger(ElasticQueryHandler.class);
 
@@ -128,18 +128,17 @@ public class ElasticQueryHandler extends QueryProcessor  {
 
     @Override
     public ResultMessage processStatement(CQLStatement statement, QueryState queryState, QueryOptions options, long queryStartNanoTime)
-            throws RequestExecutionException, RequestValidationException
-    {
+        throws RequestExecutionException, RequestValidationException {
         ClientState clientState = queryState.getClientState();
         statement.checkAccess(clientState);
         statement.validate(clientState);
 
         if (statement instanceof SelectStatement) {
-            SelectStatement select = (SelectStatement)statement;
+            SelectStatement select = (SelectStatement) statement;
             if (!select.getSelection().isAggregate()) {
                 String elasticQuery = null;
                 String elasticOptions = null;
-                for(Expression expr : select.getRowFilter(options).getExpressions()) {
+                for (Expression expr : select.getRowFilter(options).getExpressions()) {
                     if (expr.column().name.bytes.equals(ElasticSecondaryIndex.ES_QUERY_BYTE_BUFFER)) {
                         elasticQuery = UTF8Type.instance.getString(expr.getIndexValue());
                         if (elasticOptions != null)
@@ -158,11 +157,11 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         Map<String, String> esOptions = null;
                         if (elasticOptions != null) {
                             esOptions = new HashMap<>();
-                            for(NameValuePair pair : URLEncodedUtils.parse(elasticOptions, Charset.forName("UTF-8")))
+                            for (NameValuePair pair : URLEncodedUtils.parse(elasticOptions, Charset.forName("UTF-8")))
                                 esOptions.put(pair.getName(), pair.getValue());
                         }
-                        ExtendedElasticSecondaryIndex elasticIndex = (ExtendedElasticSecondaryIndex)index;
-                        return executeElasticQuery(select, queryState, options, queryStartNanoTime, (ElasticSecondaryIndex)elasticIndex.elasticSecondaryIndex, elasticQuery, esOptions);
+                        ExtendedElasticSecondaryIndex elasticIndex = (ExtendedElasticSecondaryIndex) index;
+                        return executeElasticQuery(select, queryState, options, queryStartNanoTime, (ElasticSecondaryIndex) elasticIndex.elasticSecondaryIndex, elasticQuery, esOptions);
                     }
                 }
             }
@@ -202,13 +201,13 @@ public class ElasticQueryHandler extends QueryProcessor  {
             SearchResponse resp;
             AggregationMetaDataBuilder aggMetadataBuilder = null;
             if (scrollId == null) {
-            	SearchSourceBuilder ssb = null;
-            	try {
-            		XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, query);
-            		ssb = SearchSourceBuilder.fromXContent(parser);
-            	} catch(ParsingException e) {
-            		throw new SyntaxException(e.getMessage());
-            	}
+                SearchSourceBuilder ssb = null;
+                try {
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, query);
+                    ssb = SearchSourceBuilder.fromXContent(parser);
+                } catch (ParsingException e) {
+                    throw new SyntaxException(e.getMessage());
+                }
                 String indices = (esOptions != null && esOptions.containsKey("indices")) ? esOptions.get("indices") : select.keyspace();
                 boolean toJson = select.parameters.isJson || (esOptions != null && esOptions.containsKey("json"));
                 SearchRequestBuilder srb = client.prepareSearch(indices)
@@ -236,9 +235,9 @@ public class ElasticQueryHandler extends QueryProcessor  {
                 if (hasAgregation) {
                     if (logger.isDebugEnabled())
                         logger.debug("type={} es_query={} es_options={} toJson={} size=0 with aggregation",
-                                index.typeName, ssb.toString(), indices, toJson);
+                            index.typeName, ssb.toString(), indices, toJson);
                     srb.setSize(0);
-                    aggMetadataBuilder = new AggregationMetaDataBuilder(select.keyspace(), "aggs", toJson );
+                    aggMetadataBuilder = new AggregationMetaDataBuilder(select.keyspace(), "aggs", toJson);
                     aggMetadataBuilder.build("", ssb.aggregations(), select.getSelection());
                 } else {
                     if (extraParams == null)
@@ -248,16 +247,16 @@ public class ElasticQueryHandler extends QueryProcessor  {
                     if (toJson)
                         extraParams.put("_json", "true");
 
-                    if (options.getPageSize() > 0 &&  (limit > options.getPageSize())) {
+                    if (options.getPageSize() > 0 && (limit > options.getPageSize())) {
                         if (logger.isDebugEnabled())
                             logger.debug("type={} es_query={} es_options={} toJson={} size={} with scrolling",
-                                    index.typeName, ssb.toString(), indices, toJson, options.getPageSize());
+                                index.typeName, ssb.toString(), indices, toJson, options.getPageSize());
                         srb.setScroll(new Scroll(new TimeValue(60, TimeUnit.SECONDS)));
                         srb.setSize(options.getPageSize());
                     } else {
                         if (logger.isDebugEnabled())
                             logger.debug("type={} es_query={} es_options={} toJson={} size={} with no scrolling",
-                                    index.typeName, ssb.toString(), indices, toJson, limit);
+                                index.typeName, ssb.toString(), indices, toJson, limit);
                         srb.setSize(Math.min(limit, 10000)); // default index.max_result_window is 10000
                     }
                 }
@@ -288,12 +287,12 @@ public class ElasticQueryHandler extends QueryProcessor  {
                     List<ColumnSpecification> columns = aggMetadataBuilder.getColumns();
                     List<ColumnSpecification> projectionColumns = new ArrayList<>(aggMetadataBuilder.getColumns().size());
                     int i = 0;
-                    for(ColumnDefinition cd : select.getSelection().getColumns()) {
+                    for (ColumnDefinition cd : select.getSelection().getColumns()) {
                         if (i < columns.size() && !cd.type.isValueCompatibleWith(columns.get(i).type)) {
-                            logger.warn("Aggregation column ["+columns.get(i).name.toString()+"] of type ["+
-                                    columns.get(i).type+"] is not compatible with projection term ["+cd.name.toCQLString()+"] of type ["+cd.type+"]");
-                            throw new InvalidRequestException("Aggregation column "+columns.get(i).name.toString()+
-                                    " of type "+columns.get(i).type+" is not compatible with projection term "+cd.name.toCQLString());
+                            logger.warn("Aggregation column [" + columns.get(i).name.toString() + "] of type [" +
+                                columns.get(i).type + "] is not compatible with projection term [" + cd.name.toCQLString() + "] of type [" + cd.type + "]");
+                            throw new InvalidRequestException("Aggregation column " + columns.get(i).name.toString() +
+                                " of type " + columns.get(i).type + " is not compatible with projection term " + cd.name.toCQLString());
                         }
                         projectionColumns.add(cd);
                         i++;
@@ -304,7 +303,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                 // add row results
                 if (logger.isDebugEnabled())
                     logger.debug("scrollId={} hits={}", scrollId, resp.getHits().getHits().length);
-                for(SearchHit hit : resp.getHits().getHits()) {
+                for (SearchHit hit : resp.getHits().getHits()) {
                     if (hit.getValues() != null)
                         rows.add(hit.getValues());
                 }
@@ -323,7 +322,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         resultMetadata.setHasMorePages(null);
                     } else {
                         resultMetadata.setHasMorePages(new PagingState(
-                           ByteBufferUtil.bytes(scrollId, Charset.forName("UTF-8")), (RowMark) null, remaining, remaining));
+                            ByteBufferUtil.bytes(scrollId, Charset.forName("UTF-8")), (RowMark) null, remaining, remaining));
                         if (logger.isDebugEnabled())
                             logger.debug("new paging state scrollId={} remaining={}", scrollId, remaining);
                     }
@@ -333,7 +332,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
             ResultMessage.Rows messageRows = new ResultMessage.Rows(new ResultSet(resultMetadata, rows));
             // see https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/
             if (options.getProtocolVersion().isGreaterOrEqualTo(ProtocolVersion.V4)) {
-                Map<String,ByteBuffer> customPayload = new HashMap<String,ByteBuffer>();
+                Map<String, ByteBuffer> customPayload = new HashMap<String, ByteBuffer>();
                 customPayload.put("_shards.successful", ByteBufferUtil.bytes(resp.getSuccessfulShards()));
                 customPayload.put("_shards.skipped", ByteBufferUtil.bytes(resp.getSkippedShards()));
                 customPayload.put("_shards.failed", ByteBufferUtil.bytes(resp.getFailedShards()));
@@ -342,12 +341,12 @@ public class ElasticQueryHandler extends QueryProcessor  {
                 customPayload.put("hits.max_score", ByteBufferUtil.bytes(resp.getHits().getMaxScore()));
                 if (logger.isDebugEnabled())
                     logger.debug("Add custom payload, _shards.successful={}, _shards.skipped={}, _shards.failed={}, _shards.total={}, hits.total={}, hits.max_score={}",
-                            resp.getSuccessfulShards(),
-                            resp.getSkippedShards(),
-                            resp.getFailedShards(),
-                            resp.getTotalShards(),
-                            resp.getHits().getTotalHits(),
-                            resp.getHits().getMaxScore());
+                        resp.getSuccessfulShards(),
+                        resp.getSkippedShards(),
+                        resp.getFailedShards(),
+                        resp.getTotalShards(),
+                        resp.getHits().getTotalHits(),
+                        resp.getHits().getMaxScore());
                 messageRows.setCustomPayload(customPayload);
             } else {
                 if (logger.isDebugEnabled())
@@ -381,9 +380,9 @@ public class ElasticQueryHandler extends QueryProcessor  {
         if (!firstBucket && level > 0) {
             // duplicate left part of the row to fill right part for buckets.
             List<ByteBuffer> row2 = Arrays.asList(new ByteBuffer[amdb.size()]);
-            for(int i = 0; i < index; i++) {
+            for (int i = 0; i < index; i++) {
                 if (row.get(i) != null)
-                   row2.set(i, row.get(i).duplicate());
+                    row2.set(i, row.get(i).duplicate());
             }
             rows.add(row2);
             row = row2;
@@ -394,61 +393,75 @@ public class ElasticQueryHandler extends QueryProcessor  {
     // flatten tree results to a table of rows.
     void flattenAggregation(final AggregationMetaDataBuilder amdb, final long level, String prefix, final Aggregations aggregations, List<List<ByteBuffer>> rows) throws IOException {
         List<ByteBuffer> row; // current filled row
-        for(Aggregation agg : aggregations) {
+        for (Aggregation agg : aggregations) {
             String type = agg.getType();
-            String baseName = prefix+agg.getName()+".";
+            String baseName = prefix + agg.getName() + ".";
 
             if (amdb.toJson()) {
-                switch(type) {
-                case DoubleTerms.NAME:
-                case LongTerms.NAME:
-                case StringTerms.NAME:
-                    for (Terms.Bucket termBucket : ((Terms)agg).getBuckets()) {
-                        XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
-                        xContentBuilder.startObject();
-                        termBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
-                        xContentBuilder.endObject();
-                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
-                    }
-                    break;
-                case DateHistogramAggregationBuilder.NAME:
-                    for (InternalDateHistogram.Bucket histoBucket : ((InternalDateHistogram)agg).getBuckets()) {
-                        XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
-                        if (histoBucket.getKeyed())
+                switch (type) {
+                    case DoubleTerms.NAME:
+                    case LongTerms.NAME:
+                    case StringTerms.NAME: {
+                        for (Terms.Bucket termBucket : ((Terms) agg).getBuckets()) {
+                            XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
                             xContentBuilder.startObject();
-                        histoBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
-                        if (histoBucket.getKeyed())
+                            termBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
                             xContentBuilder.endObject();
-                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
+                            setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
+                        }
                     }
                     break;
-                case InternalTDigestPercentiles.NAME:
-                case InternalHDRPercentiles.NAME:
-                case Percentiles.TYPE_NAME: {
+                    case HistogramAggregationBuilder.NAME: {
+                        for (InternalHistogram.Bucket histoBucket : ((InternalHistogram) agg).getBuckets()) {
+                            XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
+                            if (histoBucket.getKeyed())
+                                xContentBuilder.startObject();
+                            histoBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
+                            if (histoBucket.getKeyed())
+                                xContentBuilder.endObject();
+                            setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
+                        }
+                    }
+                    break;
+                    case DateHistogramAggregationBuilder.NAME: {
+                        for (InternalDateHistogram.Bucket histoBucket : ((InternalDateHistogram) agg).getBuckets()) {
+                            XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
+                            if (histoBucket.getKeyed())
+                                xContentBuilder.startObject();
+                            histoBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
+                            if (histoBucket.getKeyed())
+                                xContentBuilder.endObject();
+                            setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
+                        }
+                    }
+                    break;
+                    case InternalTDigestPercentiles.NAME:
+                    case InternalHDRPercentiles.NAME:
+                    case Percentiles.TYPE_NAME: {
                         XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
                         xContentBuilder.startObject();
                         xContentBuilder.startObject("values");
-                        for(Percentile percentile : (Percentiles)agg)
+                        for (Percentile percentile : (Percentiles) agg)
                             xContentBuilder.field(Double.toString(percentile.getPercent()), percentile.getValue());
                         xContentBuilder.endObject();
                         xContentBuilder.endObject();
                         setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
                     }
                     break;
-                case SumAggregationBuilder.NAME:
-                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"sum"), ByteBufferUtil.bytes((double)((Sum)agg).getValue()));
-                    break;
-                case AvgAggregationBuilder.NAME:
-                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"avg"), ByteBufferUtil.bytes((double)((Avg)agg).getValue()));
-                    break;
-                case MinAggregationBuilder.NAME:
-                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"min"), ByteBufferUtil.bytes((double)((Min)agg).getValue()));
-                    break;
-                case MaxAggregationBuilder.NAME:
-                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"max"), ByteBufferUtil.bytes((double)((Max)agg).getValue()));
-                    break;
-                case StatsAggregationBuilder.NAME: {
-                        Stats stats = (Stats)agg;
+                    case SumAggregationBuilder.NAME:
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(baseName + "sum"), ByteBufferUtil.bytes((double) ((Sum) agg).getValue()));
+                        break;
+                    case AvgAggregationBuilder.NAME:
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(baseName + "avg"), ByteBufferUtil.bytes((double) ((Avg) agg).getValue()));
+                        break;
+                    case MinAggregationBuilder.NAME:
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(baseName + "min"), ByteBufferUtil.bytes((double) ((Min) agg).getValue()));
+                        break;
+                    case MaxAggregationBuilder.NAME:
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(baseName + "max"), ByteBufferUtil.bytes((double) ((Max) agg).getValue()));
+                        break;
+                    case StatsAggregationBuilder.NAME: {
+                        Stats stats = (Stats) agg;
                         XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
                         xContentBuilder.startObject();
                         xContentBuilder.field("count", stats.getCount());
@@ -460,118 +473,118 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
                     }
                     break;
-                default:
-                    logger.error("unsupported aggregation type=[{}] name=[{}]", type, agg.getName());
-                    throw new IllegalArgumentException("unsupported aggregation type=["+type+"] name=["+agg.getName()+"]");
+                    default:
+                        logger.error("unsupported aggregation type=[{}] name=[{}]", type, agg.getName());
+                        throw new IllegalArgumentException("unsupported aggregation type=[" + type + "] name=[" + agg.getName() + "]");
                 }
             } else {
-                switch(type) {
-                case StringTerms.NAME: {
-                        int keyIdx = amdb.getColumn(baseName+"key");
-                        int cntIdx = amdb.getColumn(baseName+"count");
+                switch (type) {
+                    case StringTerms.NAME: {
+                        int keyIdx = amdb.getColumn(baseName + "key");
+                        int cntIdx = amdb.getColumn(baseName + "count");
                         boolean fistBucket = true;
-                        for (Terms.Bucket termBucket : ((Terms)agg).getBuckets()) {
+                        for (Terms.Bucket termBucket : ((Terms) agg).getBuckets()) {
                             row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
                             setElement(row, keyIdx, ByteBufferUtil.bytes(termBucket.getKeyAsString()));
                             setElement(row, cntIdx, ByteBufferUtil.bytes(termBucket.getDocCount()));
                             if (termBucket.getAggregations().iterator().hasNext())
-                                flattenAggregation(amdb, level+1, baseName, termBucket.getAggregations(), rows);
-                            fistBucket=false;
+                                flattenAggregation(amdb, level + 1, baseName, termBucket.getAggregations(), rows);
+                            fistBucket = false;
                         }
                     }
                     break;
-                case LongTerms.NAME: {
-                        int keyIdx = amdb.getColumn(baseName+"key");
-                        int cntIdx = amdb.getColumn(baseName+"count");
-                        amdb.setColumnType(keyIdx, baseName+"key", LongType.instance);
+                    case LongTerms.NAME: {
+                        int keyIdx = amdb.getColumn(baseName + "key");
+                        int cntIdx = amdb.getColumn(baseName + "count");
+                        amdb.setColumnType(keyIdx, baseName + "key", LongType.instance);
                         boolean fistBucket = true;
-                        for (Terms.Bucket termBucket : ((Terms)agg).getBuckets()) {
+                        for (Terms.Bucket termBucket : ((Terms) agg).getBuckets()) {
                             row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
-                            setElement(row, keyIdx, ByteBufferUtil.bytes((long)termBucket.getKeyAsNumber()));
+                            setElement(row, keyIdx, ByteBufferUtil.bytes((long) termBucket.getKeyAsNumber()));
                             setElement(row, cntIdx, ByteBufferUtil.bytes(termBucket.getDocCount()));
                             if (termBucket.getAggregations().iterator().hasNext())
-                                flattenAggregation(amdb,level+1, baseName, termBucket.getAggregations(), rows);
-                            fistBucket=false;
+                                flattenAggregation(amdb, level + 1, baseName, termBucket.getAggregations(), rows);
+                            fistBucket = false;
                         }
                     }
                     break;
-                case DoubleTerms.NAME: {
-                    int keyIdx = amdb.getColumn(baseName+"key");
-                    int cntIdx = amdb.getColumn(baseName+"count");
-                    amdb.setColumnType(keyIdx, baseName+"key", DoubleType.instance);
-                    boolean fistBucket = true;
-                        for (Terms.Bucket termBucket : ((Terms)agg).getBuckets()) {
-                            row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
-                            setElement(row,keyIdx, ByteBufferUtil.bytes((double)termBucket.getKeyAsNumber()));
-                            setElement(row,cntIdx, ByteBufferUtil.bytes(termBucket.getDocCount()));
-                            if (termBucket.getAggregations().iterator().hasNext())
-                                flattenAggregation(amdb,level+1, baseName, termBucket.getAggregations(), rows);
-                            fistBucket=false;
-                        }
-                    }
-                    break;
-                case DateHistogramAggregationBuilder.NAME: {
-                        int keyIdx = amdb.getColumn(baseName+"key");
-                        int cntIdx = amdb.getColumn(baseName+"count");
+                    case DoubleTerms.NAME: {
+                        int keyIdx = amdb.getColumn(baseName + "key");
+                        int cntIdx = amdb.getColumn(baseName + "count");
+                        amdb.setColumnType(keyIdx, baseName + "key", DoubleType.instance);
                         boolean fistBucket = true;
-                        for (InternalDateHistogram.Bucket histoBucket : ((InternalDateHistogram)agg).getBuckets()) {
+                        for (Terms.Bucket termBucket : ((Terms) agg).getBuckets()) {
                             row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
-                            setElement(row,keyIdx, TimestampType.instance.getSerializer().serialize(((DateTime)histoBucket.getKey()).toDate()));
-                            setElement(row,cntIdx, ByteBufferUtil.bytes(histoBucket.getDocCount()));
-                            if (histoBucket.getAggregations().iterator().hasNext())
-                                flattenAggregation(amdb,level+1, baseName, histoBucket.getAggregations(), rows);
-                            fistBucket=false;
+                            setElement(row, keyIdx, ByteBufferUtil.bytes((double) termBucket.getKeyAsNumber()));
+                            setElement(row, cntIdx, ByteBufferUtil.bytes(termBucket.getDocCount()));
+                            if (termBucket.getAggregations().iterator().hasNext())
+                                flattenAggregation(amdb, level + 1, baseName, termBucket.getAggregations(), rows);
+                            fistBucket = false;
                         }
                     }
                     break;
-                case HistogramAggregationBuilder.NAME: {
-                    int keyIdx = amdb.getColumn(baseName+"value");
-                    int cntIdx = amdb.getColumn(baseName+"count");
-                    boolean fistBucket = true;
-                    for (InternalHistogram.Bucket histoBucket : ((InternalHistogram)agg).getBuckets()) {
-                        row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
-                        setElement(row,keyIdx, ByteBufferUtil.bytes((double)histoBucket.getKey()));
-                        setElement(row,cntIdx, ByteBufferUtil.bytes(histoBucket.getDocCount()));
-                        if (histoBucket.getAggregations().iterator().hasNext())
-                            flattenAggregation(amdb,level+1, baseName, histoBucket.getAggregations(), rows);
-                        fistBucket=false;
-                    }
-                }
-                break;
-                case SumAggregationBuilder.NAME: {
-                        Sum sum = (Sum)agg;
-                        row = getRow(amdb, level, rows);
-                        setElement(row, amdb.getColumn(baseName+"sum"), ByteBufferUtil.bytes((double)sum.getValue()));
+                    case DateHistogramAggregationBuilder.NAME: {
+                        int keyIdx = amdb.getColumn(baseName + "key");
+                        int cntIdx = amdb.getColumn(baseName + "count");
+                        boolean fistBucket = true;
+                        for (InternalDateHistogram.Bucket histoBucket : ((InternalDateHistogram) agg).getBuckets()) {
+                            row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
+                            setElement(row, keyIdx, TimestampType.instance.getSerializer().serialize(((DateTime) histoBucket.getKey()).toDate()));
+                            setElement(row, cntIdx, ByteBufferUtil.bytes(histoBucket.getDocCount()));
+                            if (histoBucket.getAggregations().iterator().hasNext())
+                                flattenAggregation(amdb, level + 1, baseName, histoBucket.getAggregations(), rows);
+                            fistBucket = false;
+                        }
                     }
                     break;
-                case AvgAggregationBuilder.NAME: {
-                        Avg avg = (Avg)agg;
-                        row = getRow(amdb, level, rows);
-                        setElement(row, amdb.getColumn(baseName+"avg"), ByteBufferUtil.bytes((double)avg.getValue()));
+                    case HistogramAggregationBuilder.NAME: {
+                        int keyIdx = amdb.getColumn(baseName + "key");
+                        int cntIdx = amdb.getColumn(baseName + "count");
+                        boolean fistBucket = true;
+                        for (InternalHistogram.Bucket histoBucket : ((InternalHistogram) agg).getBuckets()) {
+                            row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
+                            setElement(row, keyIdx, ByteBufferUtil.bytes((double) histoBucket.getKey()));
+                            setElement(row, cntIdx, ByteBufferUtil.bytes(histoBucket.getDocCount()));
+                            if (histoBucket.getAggregations().iterator().hasNext())
+                                flattenAggregation(amdb, level + 1, baseName, histoBucket.getAggregations(), rows);
+                            fistBucket = false;
+                        }
                     }
                     break;
-                case MinAggregationBuilder.NAME: {
-                        Min min = (Min)agg;
+                    case SumAggregationBuilder.NAME: {
+                        Sum sum = (Sum) agg;
                         row = getRow(amdb, level, rows);
-                        setElement(row, amdb.getColumn(baseName+"min"), ByteBufferUtil.bytes((double)min.getValue()));
+                        setElement(row, amdb.getColumn(baseName + "sum"), ByteBufferUtil.bytes((double) sum.getValue()));
                     }
                     break;
-                case MaxAggregationBuilder.NAME: {
-                        Max max = (Max)agg;
+                    case AvgAggregationBuilder.NAME: {
+                        Avg avg = (Avg) agg;
                         row = getRow(amdb, level, rows);
-                        setElement(row, amdb.getColumn(baseName+"max"), ByteBufferUtil.bytes((double)max.getValue()));
+                        setElement(row, amdb.getColumn(baseName + "avg"), ByteBufferUtil.bytes((double) avg.getValue()));
                     }
                     break;
-                case "simple_value": {
-                        InternalSimpleValue simpleValue = (InternalSimpleValue)agg;
+                    case MinAggregationBuilder.NAME: {
+                        Min min = (Min) agg;
+                        row = getRow(amdb, level, rows);
+                        setElement(row, amdb.getColumn(baseName + "min"), ByteBufferUtil.bytes((double) min.getValue()));
+                    }
+                    break;
+                    case MaxAggregationBuilder.NAME: {
+                        Max max = (Max) agg;
+                        row = getRow(amdb, level, rows);
+                        setElement(row, amdb.getColumn(baseName + "max"), ByteBufferUtil.bytes((double) max.getValue()));
+                    }
+                    break;
+                    case "simple_value": {
+                        InternalSimpleValue simpleValue = (InternalSimpleValue) agg;
                         int valIdx = amdb.getColumn(simpleValue.getName());
                         row = getRow(amdb, level, rows);
                         setElement(row, valIdx, ByteBufferUtil.bytes(simpleValue.getValue()));
                     }
                     break;
-                default:
-                    logger.error("unsupported aggregation type=[{}] name=[{}]", type, agg.getName());
-                    throw new IllegalArgumentException("unsupported aggregation type=["+type+"] name=["+agg.getName()+"]");
+                    default:
+                        logger.error("unsupported aggregation type=[{}] name=[{}]", type, agg.getName());
+                        throw new IllegalArgumentException("unsupported aggregation type=[" + type + "] name=[" + agg.getName() + "]");
                 }
             }
         }

@@ -4,6 +4,9 @@ import org.apache.cassandra.cql3.ColumnSpecification;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.marshal.DoubleType;
+import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.db.marshal.TimestampType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.QueryState;
@@ -21,6 +24,7 @@ import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
 import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
+import org.elasticsearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
@@ -107,7 +111,7 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
 
     @SuppressForbidden(reason="test")
     @Test
-    public void testNestedAggregation() throws IOException {
+    public void testCqlAggregation() throws IOException {
         createIndex("iot");
         ensureGreen("iot");
         process(ConsistencyLevel.ONE,"CREATE TABLE iot.sensor ( name text, ts timestamp, water int, power double, es_query text, es_options text, primary key ((name),ts))");
@@ -124,22 +128,29 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         int N = 10;
+        int P = 5;
         for(long i=0; i < 24*10; i++) {
             Date ts = new Date(cal.getTime().getTime() + i*3600*1000);
-            //System.out.println("i="+i+" ts="+ts+" ="+ts.getTime());
-            process(ConsistencyLevel.ONE, "INSERT INTO iot.sensor (name,ts,water,power) VALUES ('box1',?,?,?)", ts, (int) i%2, randomDouble());
+            int water = (int) i%2;
+            double power = (i * P) / 240.0;
+            //System.out.println("i="+i+" ts="+ts+" ="+ts.getTime()+ " water="+water+" power="+power);
+            process(ConsistencyLevel.ONE, "INSERT INTO iot.sensor (name,ts,water,power) VALUES ('box1',?,?,?)", ts, water, power);
         }
 
         SumAggregationBuilder aggPower = AggregationBuilders.sum("agg_power").field("power");
         TermsAggregationBuilder aggWater = AggregationBuilders.terms("agg_water").field("water").subAggregation(aggPower);
-        DateHistogramAggregationBuilder daily_agg = AggregationBuilders.dateHistogram("daily_agg")
+        DateHistogramAggregationBuilder dailyAgg = AggregationBuilders.dateHistogram("daily_agg")
                 .field("ts")
                 .dateHistogramInterval(DateHistogramInterval.DAY)
                 .minDocCount(0)
                 .subAggregation(aggWater);
+        HistogramAggregationBuilder histoAgg = AggregationBuilders.histogram("power_histo")
+            .field("power")
+            .interval(1.0)
+            .minDocCount(0);
 
         BoolQueryBuilder queryBuilder = new BoolQueryBuilder().should(new TermQueryBuilder("name", "box1"));
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(queryBuilder).aggregation(daily_agg);
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(queryBuilder).aggregation(dailyAgg).aggregation(histoAgg);
         String esQuery = sourceBuilder.toString(ToXContent.EMPTY_PARAMS);
 
         // default limit is 10
@@ -150,7 +161,7 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
 
         /*
         System.out.println();
-        for(Row row : rs) {
+        for(UntypedResultSet.Row row : rs) {
             for(ColumnSpecification cs : rs.metadata()) {
                 if (row.has(cs.name.toString())) {
                     if (cs.type instanceof TimestampType)
@@ -166,8 +177,8 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
             System.out.println();
         }
         */
-        assertThat(rs.size(), equalTo(N*2));
-    }
 
+        assertThat(rs.size(), equalTo(N*2 + P));
+    }
 
 }
