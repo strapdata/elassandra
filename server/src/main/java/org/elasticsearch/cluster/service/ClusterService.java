@@ -68,8 +68,6 @@ import org.apache.cassandra.utils.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
-import org.codehaus.jackson.JsonGenerationException;
-import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.QueryManager;
@@ -146,7 +144,9 @@ import static java.util.Collections.emptyList;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.common.settings.Setting.listSetting;
 import static org.elasticsearch.common.settings.Setting.simpleString;
-
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.core.JsonGenerationException;
 
 public class ClusterService extends BaseClusterService {
 

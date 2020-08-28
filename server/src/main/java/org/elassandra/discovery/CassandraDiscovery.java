@@ -33,10 +33,6 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
-import org.codehaus.jackson.JsonGenerationException;
-import org.codehaus.jackson.map.JsonMappingException;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elassandra.PaxosMetaDataUpdateException;
 import org.elassandra.gateway.CassandraGatewayService;
@@ -76,6 +72,9 @@ import org.elasticsearch.discovery.DiscoveryStats;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.transport.TransportService;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonMappingException;
 
 import java.io.*;
 import java.net.InetAddress;
@@ -691,7 +690,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     private static final ApplicationState ELASTIC_SHARDS_STATES = ApplicationState.X1;
     private static final ApplicationState ELASTIC_META_DATA = ApplicationState.X2;
-    private static final ObjectMapper jsonMapper = new ObjectMapper();
+    private static final com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     private static final TypeReference<Map<String, ShardRoutingState>> indexShardStateTypeReference = new TypeReference<Map<String, ShardRoutingState>>() {};
 
     public Map<String,ShardRoutingState> getShardRoutingState(UUID nodeUuid) {

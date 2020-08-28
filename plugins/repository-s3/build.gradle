@@ -34,11 +34,11 @@ dependencies {
   compile "org.apache.httpcomponents:httpcore:${versions.httpcore}"
   compile "commons-logging:commons-logging:${versions.commonslogging}"
   compile "commons-codec:commons-codec:${versions.commonscodec}"
-  compile 'com.fasterxml.jackson.core:jackson-databind:2.6.7.1'
-  compile 'com.fasterxml.jackson.core:jackson-annotations:2.6.0'
+  compile 'com.fasterxml.jackson.core:jackson-databind:2.8.11.6'
+  compile 'com.fasterxml.jackson.core:jackson-annotations:2.8.11'
 
   // HACK: javax.xml.bind was removed from default modules in java 9, so we pull the api in here,
-  // and whitelist this hack in JarHell 
+  // and whitelist this hack in JarHell
   compile 'javax.xml.bind:jaxb-api:2.2.2'
 }
 
@@ -71,10 +71,10 @@ integTestCluster {
 
 thirdPartyAudit.excludes = [
   // classes are missing
-  'javax.servlet.ServletContextEvent', 
-  'javax.servlet.ServletContextListener', 
-  'org.apache.avalon.framework.logger.Logger', 
-  'org.apache.log.Hierarchy', 
+  'javax.servlet.ServletContextEvent',
+  'javax.servlet.ServletContextListener',
+  'org.apache.avalon.framework.logger.Logger',
+  'org.apache.log.Hierarchy',
   'org.apache.log.Logger',
   'software.amazon.ion.IonReader',
   'software.amazon.ion.IonSystem',

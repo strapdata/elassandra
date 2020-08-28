@@ -19,6 +19,7 @@
 
 package org.elassandra.cluster;
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.google.common.collect.ImmutableList;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -40,8 +41,6 @@ import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
-import org.codehaus.jackson.JsonParseException;
-import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elassandra.index.mapper.internal.NodeFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
@@ -75,6 +74,8 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.function.Consumer;
 import java.util.function.LongConsumer;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 
 public class QueryManager extends AbstractComponent {
     private final ClusterService clusterService;
@@ -122,7 +123,7 @@ public class QueryManager extends AbstractComponent {
         CFMetaData metadata = SchemaManager.getCFMetaData(indexService.keyspace(), SchemaManager.typeToCfName(indexService.keyspace(), uid.type()));
         String id = uid.id();
         if (id.startsWith("[") && id.endsWith("]")) {
-            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             return metadata.clusteringColumns().size() > 0 && elements.length == metadata.partitionKeyColumns().size();
         } else {
@@ -266,7 +267,7 @@ public class QueryManager extends AbstractComponent {
 
         if (id.startsWith("[") && id.endsWith("]")) {
             // _id is JSON array of values.
-            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             Object[] values = (map != null) ? null : new Object[elements.length];
             String[] names = (map != null) ? null : new String[elements.length];
@@ -304,7 +305,7 @@ public class QueryManager extends AbstractComponent {
         int ptLen = partitionColumns.size();
         if (routing.startsWith("[") && routing.endsWith("]")) {
             // _routing is JSON array of values.
-            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Object[] elements = jsonMapper.readValue(routing, Object[].class);
             Object[] values = new Object[elements.length];
             String[] names = new String[elements.length];
@@ -718,7 +719,7 @@ public class QueryManager extends AbstractComponent {
             if (logger.isDebugEnabled())
                 logger.debug("Document source={} require a blocking mapping update of [{}] mapping={}",
                         request.sourceAsMap(), indexService.index().getName(), mappingUpdate);
-            
+
             // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
             // wrap this in the outer catch block, as the master might also throw a MapperParsingException when updating the mapping
             onMappingUpdate.accept(mappingUpdate);
@@ -862,7 +863,7 @@ public class QueryManager extends AbstractComponent {
                     values, 0);
             this.clusterService.process(request.waitForActiveShards().toCassandraConsistencyLevel(), query, (Object[])values);
         }
-        
+
         assert request.versionType().validateVersionForWrites(request.version());
         return new Engine.IndexResult(1L, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
     }

@@ -19,8 +19,8 @@
 
 package org.elasticsearch.cluster.routing;
 
-import org.codehaus.jackson.annotate.JsonCreator;
-import org.codehaus.jackson.annotate.JsonValue;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * Represents the current state of a {@link ShardRouting} as defined by the
