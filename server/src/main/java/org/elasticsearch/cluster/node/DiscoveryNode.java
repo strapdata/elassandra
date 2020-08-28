@@ -83,9 +83,9 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
 
     private transient UUID nodeUuid;
     private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
-    
+
     public static enum DiscoveryNodeStatus {
-        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), DISABLED((byte) 3);
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), DISABLED((byte) 3), REMOVED((byte) 4);
 
         private final byte status;
 
@@ -100,16 +100,18 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         @Override
         public String toString() {
             switch (this) {
-            case UNKNOWN:
-                return "UNKNOWN";
-            case ALIVE:
-                return "ALIVE";
-            case DEAD:
-                return "DEAD";
-            case DISABLED:
-                return "DISABLED";
-            default:
-                throw new IllegalArgumentException();
+                case UNKNOWN:
+                    return "UNKNOWN";
+                case ALIVE:
+                    return "ALIVE";
+                case DEAD:
+                    return "DEAD";
+                case DISABLED:
+                    return "DISABLED";
+                case REMOVED:
+                    return "REMOVED";
+                default:
+                    throw new IllegalArgumentException();
             }
         }
     }
@@ -118,7 +120,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         this.status = status;
         return this;
     }
-    
+
     /**
      * The name of the node.
      */
@@ -132,12 +134,12 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     public DiscoveryNodeStatus getStatus() {
         return status();
     }
-    
-    
+
+
     public UUID uuid() {
         return this.nodeUuid;
     }
-    
+
     /**
      * The inet listen address of the node.
      */
@@ -145,7 +147,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         TransportAddress addr = getAddress();
         return addr.address().getAddress();
     }
-    
+
     public InetAddress getNameAsInetAddress() {
         return this.nodeNameAddress;
     }
@@ -208,7 +210,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
             roles, version, DiscoveryNodeStatus.UNKNOWN);
     }
-    
+
     /**
      * Creates a new {@link DiscoveryNode}
      * <p>
@@ -231,7 +233,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
                     roles, version, status);
     }
-    
+
     public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
             TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
         this(nodeName, nodeId, ephemeralId, hostName, hostAddress,

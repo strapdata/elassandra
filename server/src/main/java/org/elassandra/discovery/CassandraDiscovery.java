@@ -811,13 +811,20 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
 
     public DiscoveryNodeStatus discoveryNodeStatus(final EndpointState epState) {
+        if (VersionedValue.STATUS_LEFT.equals(epState.getStatus()) ||
+            (epState.getStatus() != null && epState.getStatus().startsWith("removed"))) {
+            return DiscoveryNodeStatus.REMOVED;
+        }
         if (epState == null || !epState.isAlive()) {
             return DiscoveryNodeStatus.DEAD;
         }
         if (epState.getApplicationState(ApplicationState.X2) == null) {
             return DiscoveryNodeStatus.DISABLED;
         }
-        if (VersionedValue.STATUS_NORMAL.equals(epState.getStatus())) {
+        if (VersionedValue.STATUS_NORMAL.equals(epState.getStatus()) ||
+            VersionedValue.STATUS_LEAVING.equals(epState.getStatus())  ||
+            VersionedValue.STATUS_MOVING.equals(epState.getStatus())
+        ) {
             return DiscoveryNodeStatus.ALIVE;
         }
         return DiscoveryNodeStatus.DEAD;
@@ -900,7 +907,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         public DiscoveryNode remove(String id) {
             remoteShardRoutingStateMap.remove(id);
-            return members.remove(id);
+            return members.computeIfPresent(id, (k,v) -> {
+                v.status(DiscoveryNodeStatus.REMOVED);
+                return v;
+            });
         }
 
         public DiscoveryNode get(String id) {
@@ -920,7 +930,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             String hostId = NodeEnvironment.getLocalHostId();
             nodesBuilder.localNodeId(hostId).masterNodeId(hostId);
             for (DiscoveryNode node : members.values()) {
-                nodesBuilder.add(node);
+                if (!DiscoveryNodeStatus.REMOVED.equals(node.status()))
+                    nodesBuilder.add(node);
             }
             return nodesBuilder.build();
         }
@@ -1124,7 +1135,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         if (newClusterState.metaData().version() <= clusterState().metaData().version()) {
             logger.warn("Ignore and acknowlegde obsolete update metadata={}", newClusterState.metaData().x2());
-            CassandraDiscovery.this.appliedClusterStateAction.sendAppliedToNode(coordinatorNode, newClusterState, null);
+            if (coordinatorNode != null) {
+                // coordinator from a remote DC maybe null.
+                CassandraDiscovery.this.appliedClusterStateAction.sendAppliedToNode(coordinatorNode, newClusterState, null);
+            }
             return;
         }
 
