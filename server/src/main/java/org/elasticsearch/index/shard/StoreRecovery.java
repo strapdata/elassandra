@@ -339,6 +339,7 @@ final class StoreRecovery {
                 // got closed on us, just ignore this recovery
                 return false;
             }
+            logger.warn("Failed to recover shard path=["+indexShard.shardPath().toString()+"]", e);
             throw new IndexShardRecoveryException(shardId, "failed recovery", e);
         }
         return false;
