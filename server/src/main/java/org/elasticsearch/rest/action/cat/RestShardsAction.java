@@ -181,7 +181,7 @@ public class RestShardsAction extends AbstractCatAction {
         Table table = getTableWithHeader(request);
 
         for (ShardRouting shard : state.getState().routingTable().allShards()) {
-            ShardStats shardStats = stats.asMap().get(shard);
+            ShardStats shardStats = stats.asMap().get(shard.currentNodeId());
             CommonStats commonStats = null;
             CommitStats commitStats = null;
             if (shardStats != null) {

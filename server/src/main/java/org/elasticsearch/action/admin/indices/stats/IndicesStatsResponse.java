@@ -42,7 +42,7 @@ public class IndicesStatsResponse extends BroadcastResponse implements ToXConten
 
     private ShardStats[] shards;
 
-    private Map<ShardRouting, ShardStats> shardStatsMap;
+    private Map<String, ShardStats> shardStatsMap;
 
     IndicesStatsResponse() {
 
@@ -53,11 +53,11 @@ public class IndicesStatsResponse extends BroadcastResponse implements ToXConten
         this.shards = shards;
     }
 
-    public Map<ShardRouting, ShardStats> asMap() {
+    public Map<String, ShardStats> asMap() {
         if (this.shardStatsMap == null) {
-            Map<ShardRouting, ShardStats> shardStatsMap = new HashMap<>();
+            Map<String, ShardStats> shardStatsMap = new HashMap<>();
             for (ShardStats ss : shards) {
-                shardStatsMap.put(ss.getShardRouting(), ss);
+                shardStatsMap.put(ss.getShardRouting().currentNodeId(), ss);
             }
             this.shardStatsMap = unmodifiableMap(shardStatsMap);
         }
