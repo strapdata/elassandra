@@ -1,3 +1,9 @@
+6.2.3.31 - 2020-08-31
+  * Fix _cat/shards missing column doc/store
+  * Upgrade jackson 2.8.11 to fix a security issue (see elasticsearch #45225)
+  * Upgrade to cassandra 3.11.7.1
+  * Add support for histogram aggregation over CQL
+
 6.2.3.30 - 2020-07-27
   * Fix flush, refresh and close distributed actions
   * Fix open index from a node that is not the last master node.
