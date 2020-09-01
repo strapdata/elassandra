@@ -67,7 +67,7 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
 
    apply plugin: 'maven'
    apply plugin: 'signing'
- 
+
    repositories {
      mavenLocal()
    }
@@ -77,18 +77,18 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
     publishing {
       repositories {
         maven {
-		   credentials {
-			 username = repoUsername
-			 password = repoPassword
-		   }
-		   if (project.hasProperty("repoUrl")) {
-			 url project.getProperty("repoUrl")
-		   } else if(project.version.endsWith('-SNAPSHOT')) {
-			 url "https://oss.sonatype.org/content/repositories/snapshots/"
-		   } else {
-			 url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
-		  }
-   		}
+           credentials {
+             username = repoUsername
+             password = repoPassword
+           }
+           if (project.hasProperty("repoUrl")) {
+             url project.getProperty("repoUrl")
+           } else if(project.version.endsWith('-SNAPSHOT')) {
+             url "https://oss.sonatype.org/content/repositories/snapshots/"
+           } else {
+             url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+          }
+           }
       }
       publications {
         // add license information to generated poms
@@ -97,17 +97,17 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
             Node node = xml.asNode()
             node.appendNode('inceptionYear', '2015')
 
-		    Node license = node.appendNode('licenses').appendNode('license')
+            Node license = node.appendNode('licenses').appendNode('license')
             license.appendNode('name', 'The Apache Software License, Version 2.0')
             license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
             license.appendNode('distribution', 'repo')
 
-			Node developer = node.appendNode('developers').appendNode('developer')
+            Node developer = node.appendNode('developers').appendNode('developer')
             developer.appendNode('name', 'Strapdata')
             developer.appendNode('url', 'https://www.strapdata.com')
           }
         }
-        
+
         maven(MavenPublication) {
          if (components.hasProperty('java')) {
              from components.java
@@ -119,53 +119,53 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
         }
       }
     }
-   
+
     if (enableArtifactSigning) {
        signing {
          sign configurations.archives
        }
     }
-   
+
     // OSSRH publication
     uploadArchives {
         repositories {
             mavenDeployer {
                 uploadDescriptor = true
-                
+
                 // POM signature
                 beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-                
-				if (project.hasProperty("repoUrl")) {
-					repository(url: project.getProperty("repoUrl")) {
-						authentication(userName: repoUsername, password: repoPassword)
-					}
-				} else if(project.version.endsWith('-SNAPSHOT')) {
-					snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
-						authentication(userName: repoUsername, password: repoPassword)
-					}
-				} else {
-					repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-						authentication(userName: repoUsername, password: repoPassword)
-					}
-				}
-	
+
+                if (project.hasProperty("repoUrl")) {
+                    repository(url: project.getProperty("repoUrl")) {
+                        authentication(userName: repoUsername, password: repoPassword)
+                    }
+                } else if(project.version.endsWith('-SNAPSHOT')) {
+                    snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                        authentication(userName: repoUsername, password: repoPassword)
+                    }
+                } else {
+                    repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                        authentication(userName: repoUsername, password: repoPassword)
+                    }
+                }
+
                 pom.withXml { XmlProvider xml ->
                     Node node = xml.asNode()
                     node.appendNode('name',it.name)
                     node.appendNode('description',"Elasticsearch subproject ${project.path}")
                     node.appendNode('url', 'https://github.com/strapdata/elassandra')
                     node.appendNode('inceptionYear', '2015')
-        
+
                     Node license = node.appendNode('licenses').appendNode('license')
                     license.appendNode('name', 'The Apache Software License, Version 2.0')
                     license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
                     license.appendNode('distribution', 'repo')
-                    
+
                     def scm = node.appendNode('scm')
                     scm.appendNode('url', 'https://github.com/strapdata/elassandra')
                     scm.appendNode('connection', 'scm:git:git@github.com:strapdata/elassandra.git')
                     scm.appendNode('developerConnection', 'scm:git:git@github.com:strapdata/elassandra.git')
-                    
+
                     Node developer = node.appendNode('developers').appendNode('developer')
                     developer.appendNode('name', 'Strapdata')
                     developer.appendNode('url', 'https://github.com/strapdata/elassandra')
