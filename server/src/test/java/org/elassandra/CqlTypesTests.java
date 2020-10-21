@@ -1375,5 +1375,24 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(update.getSeqNo(), equalTo(1L));
         assertThat(update.getPrimaryTerm(), equalTo(1L));
     }
+
+    @Test
+    public void testUdtUpdate() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        assertThat(client().prepareIndex("test", "my_type", "1")
+            .setSource("{\"foo\": \"bar\" }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "2")
+            .setSource("{\"foo\": \"bar\", \"fix\":{ \"foo\": 3 } }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "3")
+            .setSource("{\"foo\": \"bar\", \"fix\":{ \"foo\": 3, \"bob\":{\"name\":\"nick\" }} }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "4")
+            .setSource("{\"foo\": \"bar\", \"fix\":{ \"foo\": 3, \"bob\":{\"name\":\"nick\",\"age\":33,\"male\":true }} }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+    }
+
 }
 

@@ -303,10 +303,13 @@ public class SchemaManager {
                     userType = ats.updateUserType(ksmOut, mutations, events);
                     ksmOut = ksmOut.withSwapped(ksmOut.types.without(userType.name).with(userType));
                 } else {
-                    if (!userType.fieldType(i).asCQL3Type().equals(field.getValue().prepare(ksm)))
+                    CQL3Type newType = field.getValue().prepare(ksmOut);
+                    CQL3Type existingType = userType.fieldType(i).asCQL3Type();
+                    if (!newType.getType().isCompatibleWith(existingType.getType())) {
                         throw new InvalidRequestException(
-                                String.format(Locale.ROOT, "Field \"%s\" with type %s does not match type %s",
-                                        field.getKey(), userType.fieldType(i).asCQL3Type(), field.getValue().prepare(ksm)));
+                                String.format(Locale.ROOT, "Field \"%s\" with type %s does not match updated type %s",
+                                        field.getKey(), existingType, newType));
+                    }
                 }
             }
             return Pair.create(ksmOut, userType);
