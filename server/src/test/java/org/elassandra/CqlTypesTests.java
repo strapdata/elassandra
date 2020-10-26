@@ -1394,5 +1394,20 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
     }
 
+    @Test
+    public void testIndexDeleteLoop() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        for(int i = 0; i < 5; i++) {
+            assertThat(client().prepareIndex("test", "my_type", "1")
+                .setSource("{\"foo\": \"bar\" }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+            assertThat(client().prepareDelete("test", "my_type", "1")
+                .get().getResult(), equalTo(DocWriteResponse.Result.DELETED));
+            SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
+            assertThat(resp.getHits().getTotalHits(), equalTo(0L));
+        }
+    }
+
 }
 

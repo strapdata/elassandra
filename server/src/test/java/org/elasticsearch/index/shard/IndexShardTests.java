@@ -1510,7 +1510,6 @@ public class IndexShardTests extends IndexShardTestCase {
         indexDoc(shard, "_doc", "test");
         try (Engine.GetResult ignored = shard.get(new Engine.Get(true, false, "_doc", "test",
             new Term(IdFieldMapper.NAME, Uid.encodeId("test"))))) {
-            shard.refresh("forced-refresh-because-elassandra-has-no-seqno-and-version-map-to-trigger-refresh");
             assertThat(shard.refreshStats().getTotal(), equalTo(refreshCount+1));
         }
         indexDoc(shard, "_doc", "test");

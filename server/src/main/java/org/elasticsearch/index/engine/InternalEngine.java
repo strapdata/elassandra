@@ -928,13 +928,11 @@ public class InternalEngine extends Engine {
                      */
                     indexResult.setTranslogLocation(location);
                 }
-                /*
                 if (plan.indexIntoLucene && indexResult.getResultType() == Result.Type.SUCCESS) {
                     final Translog.Location translogLocation = trackTranslogLocation.get() ? indexResult.getTranslogLocation() : null;
                     versionMap.maybePutIndexUnderLock(index.uid().bytes(),
                         new IndexVersionValue(translogLocation, plan.versionForIndexing, plan.seqNoForIndexing, index.primaryTerm()));
                 }
-                */
                 if (indexResult.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
                     localCheckpointTracker.markSeqNoAsCompleted(indexResult.getSeqNo());
                 }
