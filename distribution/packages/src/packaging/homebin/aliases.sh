@@ -46,7 +46,6 @@ function ckill() {
    kill `ps ax | grep java | grep $CASSANDRA_HOME | awk '{ print $1}'`
 }
 
-# remove cassandra data and logs
 function cleanall() {
    read -r -p "Do you really want to remove data and logs ? [y/n]" response
    if [[ $response =~ ^(yes|y| ) ]]; then
@@ -136,18 +135,17 @@ alias threads='curl -XGET  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cat/thread_p
 alias hotthreads='curl -XGET  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_nodes/hot_threads'
 alias pending_tasks='curl -XGET  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cat/pending_tasks?v'
 alias segments='curl -XGET  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cat/segments?v'
-alias nodec='curl -XGET  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
-alias nodes='curl -XGET  $CREDENTIAL "$ES_SCHEME://$NODE:$ES_PORT/_nodes?pretty"'
+alias nodec='curl -XGET  $CREDENTIAL "$ES_SCHEME://$NODE:$ES_PORT/_cat/nodes?v&h=ip,node.role,cpu,load_1m,load_5m,load_15m,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory"'
+alias nodes='curl -XGET  $CREDENTIAL "$ES_SCHEME://$NODE:$ES_PORT/_cat/nodes?v"'
+alias nodeinfos='curl -XGET $CREDENTIAL "$ES_SCHEME://$NODE:$ES_PORT/_nodes?pretty"'
 alias settings='curl -XGET  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cluster/settings?pretty'
 alias tasks='curl  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_tasks?pretty'
 alias aliases='curl  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cat/aliases?v'
+alias plugins='curl  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_cat/plugins?v'
 alias templates='curl  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_template?pretty'
 alias pipelines='curl  $CREDENTIAL $ES_SCHEME://$NODE:$ES_PORT/_ingest/pipeline?pretty'
-
-alias nodes='curl -XGET $CREDENTIAL "$ES_SCHEME://$NODE:$ES_PORT/_nodes?pretty"'
-
 alias metadata-version='curl -XGET $CREDENTIAL "$ES_SCHEME://$NODE:$ES_PORT/_cluster/state/?pretty=true" 2>/dev/null | jq ".metadata.version"'
-alias metadata-log='$CASSANDRA_HOME/bin/cqlsh $CQLSH_OPTS -e "SELECT * from elastic_admin.metadata_log LIMIT 10"'
+alias metadata-log='cqlsh $CQLSH_OPTS -e "SELECT * from elastic_admin.metadata_log LIMIT 10"'
 
 
 alias open='open'
