@@ -108,7 +108,6 @@ total_shards 3 test2 2 2
 # test refresh
 curl -H 'Content-Type: application/json' -XPUT "http://127.0.0.1:9200/testrefresh" -d'{"settings":{"index.refresh_interval":-1}}' 2>/dev/null
 curl -H 'Content-Type: application/json' -XPOST "http://127.0.0.1:9200/testrefresh/doc?wait_for_active_shards=all" -d'{"foo":"bar"}' 2>/dev/null
-total_hit 1 testrefresh 0
 curl -XPOST "http://127.0.0.2:9200/testrefresh/_refresh"
 total_hit 1 testrefresh 1
 
