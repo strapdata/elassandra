@@ -1,3 +1,8 @@
+6.8.4.11 - 2020-11-16
+  * Upgrade to cassandra 3.11.9.1
+  * Fix nested types matching error
+  * Fixup multiple delete of the same document
+ 
 6.8.4.10 - 2020-08-10
   * Upgrade jackson 2.8.11 to fix a security issue (see elasticsearch #45225)
   * Upgrade to cassandra 3.11.7.1
