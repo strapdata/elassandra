@@ -235,7 +235,7 @@ class PrecommitTasks {
     private static Task configureLoggerUsage(Project project) {
         project.configurations.create('loggerUsagePlugin')
         project.dependencies.add('loggerUsagePlugin',
-                "org.elasticsearch.test:logger-usage:${VersionProperties.elasticsearch}")
+                "com.strapdata.elasticsearch.test:logger-usage:${VersionProperties.elasticsearch}")
         return project.tasks.create('loggerUsageCheck', LoggerUsageTask.class) {
             classpath = project.configurations.loggerUsagePlugin
             javaHome = project.runtimeJavaHome
