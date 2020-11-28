@@ -27,7 +27,6 @@ List projects = [
   'distribution:tools:launchers',
   'distribution:tools:plugin-cli',
   'server',
-  'server:cli',
   'test:framework',
   'test:fixtures:hdfs-fixture',
   'test:fixtures:krb5kdc-fixture',
