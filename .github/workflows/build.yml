@@ -1,0 +1,43 @@
+name: Build
+on:
+  push:
+    branches:
+      - v6.8.4-strapdata
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          submodules: 'true' # Fetch cassandra submodule 
+      - uses: AdoptOpenJDK/install-jdk@v1
+        with:
+          version: '8'
+          architecture: x64
+          targets: 'JAVA8_HOME;CASSANDRA_JAVA_HOME' 
+      - uses: AdoptOpenJDK/install-jdk@v1
+        with:
+          version: '12'
+          architecture: x64
+          targets: 'JAVA12_HOME;JAVA_HOME'
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v1
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+      - name: Cache Gradle packages
+        uses: actions/cache@v1
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: ${{ runner.os }}-gradle
+      - name: Build and analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./gradlew assemble sonarqube --info -x docs:build
