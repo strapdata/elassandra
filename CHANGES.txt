@@ -1,3 +1,7 @@
+6.8.4.12 - 2020-12-07
+  * Fix a mapping update issue when having a datacenter group
+  * Update doc about reindexing from a remote cluster
+
 6.8.4.11 - 2020-11-16
   * Upgrade to cassandra 3.11.9.1
   * Fix nested types matching error
