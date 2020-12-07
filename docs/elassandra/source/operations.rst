@@ -548,13 +548,46 @@ Migrating from Elasticsearch to Elassandra
 ------------------------------------------
 
 Because of data distribution and because Elassandra stores the _source document in Cassandra SSTables, restoring an Elasticsearch snapshot won't work. In order
-to import data from an existing Elasticsearch cluster to Elassandra, you can use the `logstash elasticsearch input plugin <https://www.elastic.co/guide/en/logstash/5.5/plugins-inputs-elasticsearch.html>`_
-and the `cassandra output plugin <https://github.com/PerimeterX/logstash-output-cassandra>`_.
+to import data from an existing Elasticsearch cluster to Elassandra, you can use these solutions:
+
+* Use `logstash elasticsearch input plugin <https://www.elastic.co/guide/en/logstash/5.5/plugins-inputs-elasticsearch.html>`_
+  and the `elasticsearch output plugin <https://www.elastic.co/guide/en/logstash/6.8/plugins-outputs-elasticsearch.html>`_ or
+  the `cassandra output plugin <https://github.com/PerimeterX/logstash-output-cassandra>`_. The cassandra output plugin
+  requires a more sophisticated configuration but distributes write load on all Elassandra nodes, while the Elasticsearch
+  output plugin require some heap memory to process bulk inserts.
+* Reindex from a remote Elasticsearch cluster as shown bellow:
+
+.. code::
+
+    curl -XPOST -H "Content-Type: application/json" "http://localhost:9200/_reindex" -d'{
+      "source": {
+        "remote": {
+          "host": "http://localhost:9201",
+          "socket_timeout": "1m",
+          "connect_timeout": "10s"
+        },
+        "index": "source_index"
+      },
+      "dest": {
+        "index": "dest_index"
+      }
+    }'
+
+As explain in the Elasticsearch documentation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-reindex.html#reindex-from-remote>`_, `
+remote hosts have to be explicitly whitelisted in **conf/elasticsearch.yml** using the ``reindex.remote.whitelist`` property.
+
+.. warning::
+
+    Reindexing from a remote Elasticsearch cluster can cause a spike on the Elassandra node executing the reindex query.
+
+.. note::
+
+    The reindex is only supported when reindexing from a remote Elasticsearch cluster. If you need to reindex data from
+    Elassandra, you should use the nodetool rebuild_index utility.
 
 
 Tooling
 _______
-
 
 JMXMP support
 -------------
