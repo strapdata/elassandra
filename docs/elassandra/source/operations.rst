@@ -573,7 +573,7 @@ to import data from an existing Elasticsearch cluster to Elassandra, you can use
       }
     }'
 
-As explain in the Elasticsearch documentation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-reindex.html#reindex-from-remote>`_, `
+As explain in the `Elasticsearch documentation <https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-reindex.html#reindex-from-remote>`_,
 remote hosts have to be explicitly whitelisted in **conf/elasticsearch.yml** using the ``reindex.remote.whitelist`` property.
 
 .. warning::
