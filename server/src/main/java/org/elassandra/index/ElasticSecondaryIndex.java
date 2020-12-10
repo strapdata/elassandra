@@ -21,7 +21,6 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.SettableFuture;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -128,7 +127,6 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.builders.ShapeBuilder;
 import org.elasticsearch.common.geo.parsers.ShapeParser;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.BytesRefs;
 import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.lucene.search.Queries;
@@ -532,7 +530,7 @@ public class ElasticSecondaryIndex implements Index {
         private List<Mapper> dynamicMappers = null;
 
         private boolean hasStaticField = false;
-        private boolean finalized = false;
+        private boolean finished = false;
         private BytesReference source;
         private Object externalValue = null;
         private boolean docsReversed = false;
@@ -588,9 +586,8 @@ public class ElasticSecondaryIndex implements Index {
             return externalValue;
         }
 
-        @Override
-        public void finalize() {
-            if (!finalized) {
+        public void finishHim() {
+            if (!finished) {
                 docsReversed = true;
                 if (this.indexInfo.indexService.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_5_0)) {
                     /**
@@ -2291,7 +2288,7 @@ public class ElasticSecondaryIndex implements Index {
                                             ((IndexingContext.StaticDocument) doc).applyFilter(isStatic());
                                     }
                                 }
-                                context.finalize();
+                                context.finishHim();
 
                                 final ParsedDocument parsedDoc = new ParsedDocument(
                                     context.version(),
