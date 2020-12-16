@@ -1,3 +1,7 @@
+6.2.3.32 - 2020-12-16
+  * Upgrade to cassandra 3.11.9.1
+  * Rename the finalize method to avoid GC issue
+
 6.2.3.31 - 2020-08-31
   * Fix _cat/shards missing column doc/store
   * Upgrade jackson 2.8.11 to fix a security issue (see elasticsearch #45225)
