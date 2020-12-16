@@ -21,7 +21,6 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.SettableFuture;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -367,7 +366,7 @@ public class ElasticSecondaryIndex implements Index {
             }
         }
     }
-    
+
     public void addField(ParseContext ctx, ImmutableMappingInfo.ImmutableIndexInfo indexInfo, Mapper mapper, Object value) throws IOException {
         addField( ctx, indexInfo, mapper, value, Optional.empty());
     }
@@ -375,7 +374,7 @@ public class ElasticSecondaryIndex implements Index {
     public void addField(ParseContext ctx, ImmutableMappingInfo.ImmutableIndexInfo indexInfo, Mapper mapper, Object value, Optional<String> keyName) throws IOException {
         ParseContext context = ctx;
         if (logger.isTraceEnabled())
-            logger.trace("doc[{}] class={} name={} value={} keyName={}", 
+            logger.trace("doc[{}] class={} name={} value={} keyName={}",
                     context.docs().indexOf(context.doc()), mapper.getClass().getSimpleName(), mapper.name(), value, keyName);
 
         if (value == null && (!(mapper instanceof FieldMapper) || ((FieldMapper) mapper).fieldType().nullValue() == null))
@@ -429,12 +428,12 @@ public class ElasticSecondaryIndex implements Index {
                     // see http://docs.oracle.com/javase/7/docs/api/java/util/concurrent/locks/ReentrantReadWriteLock.html for locking a cache
                     if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
                         indexInfo.dynamicMappingUpdateLock.readLock().lock();
-                    
+
                     String subMapperName = mapper.cqlStruct().equals(CqlStruct.OPAQUE_MAP) ?
                             ObjectMapper.DEFAULT_KEY :
                             entry.getKey();
                     Mapper subMapper = objectMapper.getMapper(subMapperName);
-                    
+
                     if (subMapper == null && mapper.cqlStruct().equals(Mapper.CqlStruct.MAP)) {
                         // try from the mapperService that could have been updated
                         DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(indexInfo.type);
@@ -515,10 +514,10 @@ public class ElasticSecondaryIndex implements Index {
 
                     try {
                         if (subMapper != null) {
-                        	ElasticSecondaryIndex.this.addField(context, indexInfo, subMapper, entry.getValue(), 
+                        	ElasticSecondaryIndex.this.addField(context, indexInfo, subMapper, entry.getValue(),
                             		CqlStruct.OPAQUE_MAP.equals(mapper.cqlStruct()) ? Optional.of(mapper.name() + "." + entry.getKey()) : Optional.empty());
                         } else {
-                            logger.error("submapper not found for nested field [{}] in index [{}] for metadata.version={}, not indexed", 
+                            logger.error("submapper not found for nested field [{}] in index [{}] for metadata.version={}, not indexed",
                                     subMapperName, indexInfo.name, indexInfo.version);
                         }
                     } finally {
@@ -561,7 +560,7 @@ public class ElasticSecondaryIndex implements Index {
         private List<Mapper> dynamicMappers = null;
 
         private boolean hasStaticField = false;
-        private boolean finalized = false;
+        private boolean finished = false;
         private BytesReference source;
         private Object externalValue = null;
 
@@ -615,10 +614,9 @@ public class ElasticSecondaryIndex implements Index {
             return externalValue;
         }
 
-        @Override
-        public void finalize() {
+        public void finishHim() {
             // reverse the order of docs for nested docs support, parent should be last
-            if (!finalized) {
+            if (!finished) {
                 if (this.documents.size() > 1) {
                     Collections.reverse(this.documents);
                 }
@@ -1239,7 +1237,7 @@ public class ElasticSecondaryIndex implements Index {
                     logger.debug("Ignoring virtual index={}", indexMetaData.getIndex().getName());
                     continue;
                 }
-                
+
                 String index = indexMetaData.getIndex().getName();
                 MappingMetaData mappingMetaData = indexMetaData.mapping(typeName);
 
@@ -2310,7 +2308,7 @@ public class ElasticSecondaryIndex implements Index {
                                             ((IndexingContext.StaticDocument) doc).applyFilter(isStatic());
                                     }
                                 }
-                                context.finalize();
+                                context.finishHim();
 
                                 final ParsedDocument parsedDoc = new ParsedDocument(
                                     context.version(),
@@ -2458,7 +2456,7 @@ public class ElasticSecondaryIndex implements Index {
                 @Override
                 public Object apply(Object t) {
                     return new ImmutableMappingInfo(clusterState);
-                }    
+                }
             });
             if (logger.isDebugEnabled())
                 logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={} started shards={}/{}",
@@ -2494,7 +2492,7 @@ public class ElasticSecondaryIndex implements Index {
                     updateMapping = true;
                     break;
                 }
-                
+
                 // trigger a mapping update when deleting an index #302
                 if (!event.indicesDeleted().isEmpty()) {
                     for(org.elasticsearch.index.Index index : event.indicesDeleted()) {
