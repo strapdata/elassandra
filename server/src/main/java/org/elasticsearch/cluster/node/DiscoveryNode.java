@@ -19,6 +19,8 @@
 
 package org.elasticsearch.cluster.node;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -79,9 +81,9 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     private final String hostName;
     private final String hostAddress;
     private final TransportAddress address;
-    private final Map<String, String> attributes;
+    private final ImmutableMap<String, String> attributes;
     private final Version version;
-    private final Set<Role> roles;
+    private final ImmutableSet<Role> roles;
 
     private transient UUID nodeUuid;
     private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
@@ -293,7 +295,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         } else {
             this.version = version;
         }
-        this.attributes = Collections.unmodifiableMap(attributes);
+        this.attributes = (attributes instanceof ImmutableMap) ? (ImmutableMap)attributes : ImmutableMap.copyOf(attributes);
         //verify that no node roles are being provided as attributes
         Predicate<Map<String, String>> predicate =  (attrs) -> {
             for (Role role : Role.values()) {
@@ -302,9 +304,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             return true;
         };
         assert predicate.test(attributes);
-        Set<Role> rolesSet = EnumSet.noneOf(Role.class);
-        rolesSet.addAll(roles);
-        this.roles = Collections.unmodifiableSet(rolesSet);
+        this.roles = (roles instanceof ImmutableSet) ? (ImmutableSet)roles : ImmutableSet.copyOf(roles);
     }
 
     /** Creates a DiscoveryNode representing the local node. */
@@ -355,15 +355,17 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             this.address = new TransportAddress(in, hostName);
         }
         int size = in.readVInt();
-        this.attributes = new HashMap<>(size);
+        ImmutableMap.Builder<String,String> attrsBuilder = ImmutableMap.builder();
         for (int i = 0; i < size; i++) {
-            this.attributes.put(in.readString(), in.readString());
+            attrsBuilder.put(in.readString(), in.readString());
         }
+        this.attributes = attrsBuilder.build();
         int rolesSize = in.readVInt();
-        this.roles = EnumSet.noneOf(Role.class);
+        ImmutableSet.Builder<Role> rolesBuilder = ImmutableSet.builder();
         for (int i = 0; i < rolesSize; i++) {
-            this.roles.add(in.readEnum(Role.class));
+            rolesBuilder.add(in.readEnum(Role.class));
         }
+        this.roles = rolesBuilder.build();
         this.version = Version.readVersion(in);
     }
 

@@ -18,6 +18,8 @@ package org.elassandra.discovery;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
 import com.google.common.net.InetAddresses;
@@ -108,7 +110,7 @@ import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK
 public class CassandraDiscovery extends AbstractLifecycleComponent implements Discovery, IEndpointStateChangeSubscriber, AppliedClusterStateAction.AppliedClusterStateListener {
     final Logger logger = LogManager.getLogger(CassandraDiscovery.class);
 
-    private static final EnumSet CASSANDRA_ROLES = EnumSet.of(Role.MASTER,Role.DATA);
+    private static final ImmutableSet CASSANDRA_ROLES = ImmutableSet.of(Role.MASTER,Role.DATA);
     private final TransportService transportService;
 
     private final Settings settings;
@@ -350,7 +352,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
                 if (gn == null) {
                     // new node
-                    Map<String, String> attrs =  new HashMap<>();
+                    ImmutableMap.Builder<String, String> attrs =  ImmutableMap.builder();
                     attrs.put("dc", localDc);
                     attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
                     logger.debug("Add node NEW host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
@@ -358,7 +360,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         internalIp == null ? null : NetworkAddress.format(internalIp),
                         rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
                         status);
-                    gn = new GossipNode(new DiscoveryNode(buildNodeName(endpoint), hostId.toString(), addr, attrs, CASSANDRA_ROLES, Version.CURRENT, status), x1Map);
+                    gn = new GossipNode(new DiscoveryNode(buildNodeName(endpoint), hostId.toString(), addr, attrs.build(), CASSANDRA_ROLES, Version.CURRENT, status), x1Map);
                     nodeUpdate = true;
                     routingUpdate = status.isAlive();
                 } else {
