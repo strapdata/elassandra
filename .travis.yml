@@ -117,7 +117,7 @@ deploy:
   # publish snapshot artifact in private strapdata nexus
   - provider: script
     skip_cleanup: true
-    script: JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_BASE_URL/elassandra-releases-local/"
+    script: JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
     on:
       tags: false
       branch: v6.8.4-strapdata
@@ -126,9 +126,9 @@ deploy:
   - provider: script
     skip_cleanup: true
     script: >-
-      JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_BASE_URL/elassandra-snapshots-local/" &&
-      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_BASE_URL}/elassandra-releases-rpm-local/$(basename ${RPMPKG})" &&
-      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_BASE_URL}/elassandra-releases-deb-local/"
+      JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/" &&
+      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
+      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
     on:
       tags: true
       branch: v6.8.4-strapdata
