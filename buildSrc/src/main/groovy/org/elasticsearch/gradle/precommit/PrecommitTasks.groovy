@@ -169,7 +169,7 @@ class PrecommitTasks {
 
         project.configurations.create('loggerUsagePlugin')
         project.dependencies.add('loggerUsagePlugin',
-                "org.elasticsearch.test:logger-usage:${org.elasticsearch.gradle.VersionProperties.elasticsearch}")
+                "com.strapdata.test:logger-usage:${org.elasticsearch.gradle.VersionProperties.elasticsearch}")
 
         loggerUsageTask.configure {
             classpath = project.configurations.loggerUsagePlugin
