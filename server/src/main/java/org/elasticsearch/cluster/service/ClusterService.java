@@ -359,6 +359,7 @@ public class ClusterService extends BaseClusterService {
     private final String selectOwnerMetadataQuery;
     private final String initMetadataQuery;
     private final String updateMetaDataQuery;
+    private final Pattern extensionKeyPattern;
 
     private final SchemaManager schemaManager;
     private final QueryManager queryManager;
@@ -384,7 +385,8 @@ public class ClusterService extends BaseClusterService {
         } else {
             elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
         }
-        logger.info("Starting with elastic_admin keyspace=[{}]", elasticAdminKeyspaceName);
+        extensionKeyPattern = Pattern.compile(elasticAdminKeyspaceName + "(_[a-zA-Z0-9_\\-]+)?/.*");
+        logger.info("Starting with elastic_admin keyspace=[{}], CQL extension pattern=[{}]", elasticAdminKeyspaceName, extensionKeyPattern);
 
         this.datacenterTags = SETTING_DATACENTER_TAGS.get(settings);
         logger.info("Starting with datacenter.tags={}", datacenterTags);
@@ -915,8 +917,6 @@ public class ClusterService extends BaseClusterService {
             throw new ElasticsearchException("Failed to serialize index metadata", e);
         }
     }
-
-    static Pattern extensionKeyPattern = Pattern.compile(ELASTIC_ADMIN_KEYSPACE + "(_[a-zA-Z0-9_\\-]+)?/.*");
 
     public boolean isValidExtensionKey(String extensionName) {
         if (extensionName == null)
