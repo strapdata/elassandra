@@ -15,6 +15,8 @@
  */
 package org.elassandra.discovery;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
 import com.google.common.net.InetAddresses;
@@ -101,7 +103,7 @@ import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK
  *
  */
 public class CassandraDiscovery extends AbstractLifecycleComponent implements Discovery, IEndpointStateChangeSubscriber, AppliedClusterStateAction.AppliedClusterStateListener {
-    private static final EnumSet CASSANDRA_ROLES = EnumSet.of(Role.MASTER,Role.DATA);
+    private static final ImmutableSet CASSANDRA_ROLES = ImmutableSet.of(Role.MASTER,Role.DATA);
     private final TransportService transportService;
 
     private final ClusterService clusterService;
@@ -860,7 +862,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             DiscoveryNode dn1 = clusterGroup.members.get(hostId);
             DiscoveryNode dn2 = clusterGroup.members.compute(hostId, (k,dn) -> {
                 if (dn == null) {
-                    Map<String, String> attrs =  new HashMap<>();
+                    ImmutableMap.Builder<String, String> attrs =  ImmutableMap.builder();
                     attrs.put("dc", localDc);
                     attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
                     logger.debug("Add node host_id={} endpoint={} internal_ip={}, rpc_address={}, status={}",
@@ -868,7 +870,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         internalIp == null ? null : NetworkAddress.format(internalIp),
                         rpcAddress == null ? null : NetworkAddress.format(rpcAddress),
                         status);
-                    return new DiscoveryNode(buildNodeName(endpoint), hostId, addr, attrs, CASSANDRA_ROLES, Version.CURRENT, status);
+                    return new DiscoveryNode(buildNodeName(endpoint), hostId, addr, attrs.build(), CASSANDRA_ROLES, Version.CURRENT, status);
                 } else {
                     if (!dn.getName().equals(buildNodeName(endpoint)) || !dn.getInetAddress().equals(Boolean.getBoolean("es.use_internal_address") ? internalIp : rpcAddress)) {
                         // update DiscoveryNode IP if endpoint is ALIVE
