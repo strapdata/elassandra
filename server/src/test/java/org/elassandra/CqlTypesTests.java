@@ -1391,5 +1391,23 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
         assertThat(((Map<String, Object>)((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("mail")).get("to"), equalTo("bob@foo.com"));
     }
+
+    @Test
+    public void testUdtUpdate() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        assertThat(client().prepareIndex("test", "my_type", "1")
+            .setSource("{\"foo\": \"bar\" }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "2")
+            .setSource("{\"foo\": \"bar\", \"fix\":{ \"foo\": 3 } }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "3")
+            .setSource("{\"foo\": \"bar\", \"fix\":{ \"foo\": 3, \"bob\":{\"name\":\"nick\" }} }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "4")
+            .setSource("{\"foo\": \"bar\", \"fix\":{ \"foo\": 3, \"bob\":{\"name\":\"nick\",\"age\":33,\"male\":true }} }", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+    }
 }
 

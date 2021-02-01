@@ -256,7 +256,7 @@ public class SchemaManager extends AbstractComponent {
         }
         return metadata;
     }
-    
+
     public static KeyspaceMetadata getKSMetaDataCopy(final String ksName) {
         KeyspaceMetadata metadata = Schema.instance.getKSMetaDataSafe(ksName);
         return metadata.copy();
@@ -312,10 +312,13 @@ public class SchemaManager extends AbstractComponent {
                     userType = ats.updateUserType(ksmOut, mutations, events);
                     ksmOut = ksmOut.withSwapped(ksmOut.types.without(userType.name).with(userType));
                 } else {
-                    if (!userType.fieldType(i).asCQL3Type().equals(field.getValue().prepare(ksm)))
+                    CQL3Type newType = field.getValue().prepare(ksmOut);
+                    CQL3Type existingType = userType.fieldType(i).asCQL3Type();
+                    if(!newType.getType().isCompatibleWith(existingType.getType())) {
                         throw new InvalidRequestException(
-                                String.format(Locale.ROOT, "Field \"%s\" with type %s does not match type %s",
-                                        field.getKey(), userType.fieldType(i).asCQL3Type(), field.getValue().prepare(ksm)));
+                            String.format(Locale.ROOT, "Field \"%s\" with type %s does not match updated type %s",
+                                field.getKey(), existingType, newType));
+                    }
                 }
             }
             return Pair.create(ksmOut, userType);
@@ -377,7 +380,7 @@ public class SchemaManager extends AbstractComponent {
         return ksm;
     }
 
-    private KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName, 
+    private KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName,
             Map<String, ColumnDescriptor> columnsMap,
             String tableOptions,
             final Collection<IndexMetaData> siblings, // include the indexMetaData and all other indices having a mapping to the same table.
@@ -419,17 +422,17 @@ public class SchemaManager extends AbstractComponent {
         ParsedStatement.Prepared stmt = cts.prepare(ksm.types);
         CFMetaData cfm = ((CreateTableStatement)stmt.statement).getCFMetaData();
         updateTableExtensions(ksm, cfm, siblings);
-        
+
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
         SchemaKeyspace.addTableToSchemaMutation(cfm, true, builder);
         mutations.add(builder.build());
-        
+
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.CREATED, Event.SchemaChange.Target.TABLE, cts.keyspace(), cts.columnFamily()));
         return ksm.withSwapped(ksm.tables.with(cfm));
     }
 
     // add only new columns and update table extension with mapping metadata
-    private KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName, 
+    private KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName,
             Map<String, ColumnDescriptor> columnsMap,
             TableAttributes tableAttrs,
             final Collection<IndexMetaData> siblings,
@@ -581,32 +584,32 @@ public class SchemaManager extends AbstractComponent {
         Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
         if (cfm.params != null && cfm.params.extensions != null)
             extensions.putAll(cfm.params.extensions);
-        
+
         for(IndexMetaData imd : siblings) {
             assert ksm.name.equals(imd.keyspace()) : "Keyspace metadata="+ksm.name+" does not match indexMetadata.keyspace="+imd.keyspace();
             clusterService.putIndexMetaDataExtension(imd, extensions);
         }
-        
+
         cfm.extensions(extensions);
         return cfm;
     }
-    
+
     /**
      * Populate the columnsMap of a table for the provided indeMetaData/mapperService
      */
     private KeyspaceMetadata buildColumns(final KeyspaceMetadata ksm2,
-            final CFMetaData cfm, 
-            final String type, 
-            final IndexMetaData indexMetaData, 
-            final MapperService mapperService, 
+            final CFMetaData cfm,
+            final String type,
+            final IndexMetaData indexMetaData,
+            final MapperService mapperService,
             Map<String, ColumnDescriptor> columnsMap,
-            final Collection<Mutation> mutations, 
+            final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
-        
+
         KeyspaceMetadata ksm = ksm2;
         String cfName = typeToCfName(ksm.name, type);
         boolean newTable = (cfm == null);
-        
+
         DocumentMapper docMapper = mapperService.documentMapper(type);
         MappingMetaData mappingMd = indexMetaData.getMappings().get(type);
         Map<String, Object> mappingMap = mappingMd.sourceAsMap();
@@ -632,7 +635,7 @@ public class SchemaManager extends AbstractComponent {
             ColumnDescriptor colDesc = new ColumnDescriptor(column);
             FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
             ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-            
+
             if (fieldMapper != null) {
                 if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
                     continue; // ignore field.
@@ -745,15 +748,15 @@ public class SchemaManager extends AbstractComponent {
             }
             columnsMap.putIfAbsent(colDesc.name, colDesc);
         }
-        
+
         // add _parent column if necessary. Parent and child documents should have the same partition key.
         if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null)
             columnsMap.putIfAbsent("_parent", new ColumnDescriptor("_parent", CQL3Type.Raw.from(CQL3Type.Native.TEXT)));
-        
+
         logger.debug("columnsMap={}", columnsMap);
         return ksm;
     }
-    
+
     /**
      * Create table for all IndexMetaData having a mapping.
      * WARNING: schema mutations are applied in a random order and table extensions is replace by the last one.
@@ -764,26 +767,26 @@ public class SchemaManager extends AbstractComponent {
      * @param events
      * @return Modified ksm
      */
-    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2, 
+    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2,
             final String type,
             final Map<Index, Pair<IndexMetaData, MapperService>> indiceMap,
-            final Collection<Mutation> mutations, 
+            final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
         String query = null;
         String ksName = null;
         String cfName = null;
         Map<String, Object> mappingMap = null;
-        
+
         try {
             KeyspaceMetadata ksm = ksm2;
             ksName = ksm2.name;
             cfName = typeToCfName(ksName, type);
-            
+
             final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
             boolean newTable = (cfm == null);
 
             MapperService mapperService = null; // set with one of the IndexMetaData !
-            
+
             Map<String, ColumnDescriptor> columnsMap = new HashMap<>();
             for(Pair<IndexMetaData, MapperService> pair : indiceMap.values()) {
                 IndexMetaData indexMetaData = pair.left;
@@ -812,7 +815,7 @@ public class SchemaManager extends AbstractComponent {
                 ksm = updateTable(ksm, cfName, columnsMap, tableAttrs, indiceMap.values().stream().map(p->p.left).collect(Collectors.toList()), mutations, events);
             }
 
-            
+
             String secondaryIndexClazz = mapperService.getIndexSettings().getSettings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
                     clusterService.state().metaData().settings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
                             ClusterService.defaultSecondaryIndexClass.getName()));
