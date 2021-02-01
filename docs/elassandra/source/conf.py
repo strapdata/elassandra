@@ -65,7 +65,7 @@ author = u'Strapdata'
 # built documents.
 #
 # The short X.Y version.
-version = u'6.2.3.32'
+version = u'6.2.3.33'
 # The full version, including alpha/beta/rc tags.
 release = u'6.2.3.32'
 

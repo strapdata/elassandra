@@ -1,3 +1,8 @@
+6.2.3.33 - 2020-02-01
+  * Fix a possible StackOverflowError
+  * Fix a mapping update issue when having a datacenter group
+  * Fix sub types matching
+
 6.2.3.32 - 2020-12-16
   * Upgrade to cassandra 3.11.9.1
   * Rename the finalize method to avoid GC issue
