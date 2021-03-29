@@ -8,7 +8,7 @@ idna==2.6
 imagesize==0.7.1
 Jinja2==2.10.1
 MarkupSafe==1.0
-Pygments==2.2.0
+Pygments==2.7.4
 pytz==2017.2
 recommonmark==0.4.0
 requests==2.21.0
