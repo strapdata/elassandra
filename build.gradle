@@ -636,6 +636,10 @@ allprojects {
 }
 
 allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        options.fork = true
+    }
+
   task checkPart1
   task checkPart2 
   tasks.matching { it.name == "check" }.all { check ->
@@ -657,6 +661,5 @@ gradle.projectsEvaluated {
 }
 
 tasks.getByName('clean').dependsOn('cassandra-realclean')
-
 
 
