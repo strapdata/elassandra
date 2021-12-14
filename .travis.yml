@@ -26,6 +26,8 @@ addons:
       - jq
       - bash
       - python3-pip
+      - python3-setuptools
+      - python3-wheel
 
 jdk:
   - openjdk8
@@ -48,7 +50,7 @@ cache:
 before_install:
   - wget -qO ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
   - unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
-  - pip3 install sphinx~=1.8.5 sphinx_rtd_theme
+  #- pip3 install wheel sphinx~=1.8.5 sphinx_rtd_theme
   - sudo fallocate -l 4G /swapfile
   - sudo chmod 600 /swapfile
   - sudo mkswap /swapfile
@@ -66,7 +68,7 @@ install:
   - env
 
 script:
-  - (cd docs/elassandra; make clean html SPHINXOPTS="-W")
+  #- (cd docs/elassandra; make clean html SPHINXOPTS="-W")
   - JAVA_HOME=$JAVA12_HOME ./gradlew server:test -Dbuild.snapshot=false
   - JAVA_HOME=$JAVA12_HOME ./gradlew assemble -Dbuild.snapshot=false
   - JAVA_HOME=$JAVA8_HOME ./integ-test/test-cleanup-repair.sh $(ls distribution/archives/tar/build/distributions/elassandra-*.tar.gz)
@@ -115,21 +117,21 @@ deploy:
   #    repo: strapdata/elassandra
 
   # publish snapshot artifact in private strapdata nexus
-  - provider: script
-    skip_cleanup: true
-    script: JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
-    on:
-      tags: false
-      branch: v6.8.4-strapdata
+  #- provider: script
+  #  skip_cleanup: true
+  #  script: JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+  #  on:
+  #    tags: false
+  #    branch: v6.8.4-strapdata
 
   # publish release artifact in strapdata nexus
-  - provider: script
-    skip_cleanup: true
-    script: >-
-      JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/" &&
-      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
-      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
-    on:
-      tags: true
-      branch: v6.8.4-strapdata
-      repo: strapdata/elassandra
+  #- provider: script
+  #  skip_cleanup: true
+  #  script: >-
+  #    JAVA_HOME=$JAVA12_HOME ./gradlew publishNebulaPublicationToTargetRepository -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/" &&
+  #    curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
+  #    curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+  #  on:
+  #    tags: true
+  #    branch: v6.8.4-strapdata
+  #    repo: strapdata/elassandra
