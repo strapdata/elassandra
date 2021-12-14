@@ -15,7 +15,7 @@
 import sys
 import os
 
-import sphinx_rtd_theme
+#import sphinx_rtd_theme
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -130,7 +130,7 @@ todo_include_todos = False
 
 # Add custom javascript
 def setup(app):
-    app.add_javascript('custom.js')
+    app.add_js_file('custom.js')
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -138,7 +138,7 @@ def setup(app):
 # a list of builtin themes.
 #html_theme = 'basicstrap'
 html_theme = 'sphinx_rtd_theme'
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+#html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 #html_theme_options = {
 #  'header_inverse': True,

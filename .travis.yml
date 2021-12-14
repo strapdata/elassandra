@@ -26,6 +26,8 @@ addons:
       - jq
       - bash
       - python3-pip
+      - python3-setuptools
+      - python3-wheel
 
 jdk:
   - openjdk8
@@ -49,12 +51,14 @@ before_install:
   - wget https://github.com/strapdata/bach/raw/master/install-jdk.sh
   - chmod a+x install-jdk.sh && ./install-jdk.sh -v -f 9;
   - keytool -import -trustcacerts -keystore $JAVA9_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
+  - keytool -import -trustcacerts -keystore $JAVA9_HOME/lib/security/cacerts -storepass changeit -alias GlobalSignAtlasCA -file GlobalSignAtlasCA.pem -noprompt
+  - keytool -import -trustcacerts -keystore $JAVA9_HOME/lib/security/cacerts -storepass changeit -alias GlobalSignAtlasR3 -file GlobalSignAtlasR3.pem -noprompt
   # solves gpg server problems
   # - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
   - wget -O ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
   - unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
-  - pip3 install --upgrade setuptools
-  - pip3 install sphinx~=2.4.4 sphinx_rtd_theme
+  - pip3 install --upgrade setuptools wheel
+  #- pip3 install sphinx~=4.3.1 sphinx_rtd_theme
   - sudo fallocate -l 4G /swapfile
   - sudo chmod 600 /swapfile
   - sudo mkswap /swapfile
@@ -66,9 +70,9 @@ install:
   - JAVA_HOME=$JAVA9_HOME ./gradlew --version
 
 script:
-  - (cd docs/elassandra; make clean html SPHINXOPTS="-W")
-  - JAVA_HOME=$JAVA9_HOME ./gradlew server:test -Dbuild.snapshot=false
-  - JAVA_HOME=$JAVA9_HOME ./gradlew assemble -Dbuild.snapshot=false
+  #- (cd docs/elassandra; make clean html SPHINXOPTS="-W")
+  - JAVA_HOME=$JAVA9_HOME JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED" ./gradlew server:test -Dbuild.snapshot=false
+  - JAVA_HOME=$JAVA9_HOME JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED" ./gradlew assemble -Dbuild.snapshot=false
   - JAVA_HOME=$JAVA8_HOME ./integ-test/test-cleanup-repair.sh $(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
   - JAVA_HOME=$JAVA8_HOME ./integ-test/test-datacenter-groups.sh $(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
 
@@ -103,35 +107,35 @@ deploy:
       tags: true
 
   # bump and push to gke marketplace repo, build gke images, push to gcr.io
-  - provider: script
-    skip_cleanup: true
-    script: bash ./ci/gke-marketplace.sh
-    on:
-      tags: true
-      repo: strapdata/elassandra
+  #- provider: script
+  #  skip_cleanup: true
+  #  script: bash ./ci/gke-marketplace.sh
+  #  on:
+  #    tags: true
+  #    repo: strapdata/elassandra
 
   # publish snapshot artifact in strapdata nexus
-  - provider: script
-    skip_cleanup: true
-    script: JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
-    on:
-      tags: false
-      repo: strapdata/elassandra
+  #- provider: script
+  #  skip_cleanup: true
+  #  script: JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+  #  on:
+  #    tags: false
+  #    repo: strapdata/elassandra
 
   # publish release artifact in strapdata nexus
-  - provider: script
-    skip_cleanup: true
-    script: JAVA_HOME=$JAVA9_HOME ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
-    on:
-      tags: true
-      repo: strapdata/elassandra
+  #- provider: script
+  #  skip_cleanup: true
+  #  script: JAVA_HOME=$JAVA9_HOME ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
+  #  on:
+  #    tags: true
+  #    repo: strapdata/elassandra
 
   # publish RMP+DEB in strapdata repo
-  - provider: script
-    skip_cleanup: true
-    script: >-
-      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
-      curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
-    on:
-      tags: true
-      repo: strapdata/elassandra
+  #- provider: script
+  #  skip_cleanup: true
+  #  script: >-
+  #    curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})" &&
+  #    curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+  #  on:
+  #    tags: true
+  #    repo: strapdata/elassandra
