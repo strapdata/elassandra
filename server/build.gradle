@@ -142,10 +142,32 @@ dependencies {
     exclude group:'io.netty', module:'netty-all'
     exclude group:'joda-time', module:'joda-time'
     exclude group:'commons-codec', module:'commons-codec'
+    exclude group:'ch.qos.logback', module:'logback-classic'
+    exclude group:'ch.qos.logback', module:'logback-core'
     // use the elasticsearch version rather than version 2.9.10
     exclude group:'com.fasterxml.jackson.core', module:'jackson-core'
     exclude group:'com.fasterxml.jackson.core', module:'jackson-databind'
     exclude group:'com.fasterxml.jackson.core', module:'jackson-annotations'
+    exclude group:'com.github.rholder', module:'snowball-stemmer'
+  }
+  compile("com.strapdata.cassandra:cassandra-thrift:${versions.cassandra}") {
+    exclude group:'org.apache.commons', module:'commons-lang3'
+    exclude group:'org.slf4j', module:'slf4j-api'
+    exclude group:'ch.qos.logback', module:'logback-classic'
+    exclude group:'ch.qos.logback', module:'logback-core'
+
+    exclude group:'net.java.dev.jna', module:'jna'
+    exclude group:'org.ow2.asm', module:'asm'
+    exclude group:'org.yaml', module:'snakeyaml'
+    exclude group:'io.netty', module:'netty-all'
+    exclude group:'joda-time', module:'joda-time'
+    exclude group:'commons-codec', module:'commons-codec'
+
+    // use the elasticsearch version rather than version 2.9.10
+    exclude group:'com.fasterxml.jackson.core', module:'jackson-core'
+    exclude group:'com.fasterxml.jackson.core', module:'jackson-databind'
+    exclude group:'com.fasterxml.jackson.core', module:'jackson-annotations'
+    exclude group:'com.github.rholder', module:'snowball-stemmer'
   }
   /*
   compile group: 'org.antlr', name: 'antlr', version: '3.5.2'
@@ -169,7 +191,7 @@ dependencies {
   compile "commons-codec:commons-codec:${versions.commonscodec}"
   compile "commons-logging:commons-logging:${versions.commonslogging}"
   compile "org.apache.commons:commons-lang3:3.4"
-
+  compile "com.google.code.findbugs:jsr305:2.0.2"
 
   // Elasticsearch require netty 4.1
   // https://github.com/netty/netty/issues/6855
@@ -179,8 +201,8 @@ dependencies {
   // log4j2 to slf4j to logback
   compile "org.apache.logging.log4j:log4j-to-slf4j:${versions.log4j}"
   compile "org.slf4j:slf4j-api:1.7.25", optional
-  compile "ch.qos.logback:logback-classic:1.1.8"
-  compile "ch.qos.logback:logback-core:1.1.8"
+  compile "ch.qos.logback:logback-classic:1.2.9"
+  compile "ch.qos.logback:logback-core:1.2.9"
   compile "org.javassist:javassist:3.20.0-GA"
 
   compile 'net.sf.jopt-simple:jopt-simple:5.0.2'

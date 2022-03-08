@@ -367,17 +367,17 @@ public final class NodeEnvironment  implements Closeable {
         NodeMetaData.FORMAT.write(metaData, paths);
         return metaData;
     }
-    
+
     public static String getLocalHostId() {
         return getLocalHostId(null);
     }
-    
+
     public static String getLocalHostId(Settings settings) {
         try {
             if (DatabaseDescriptor.isDaemonInitialized()) {
-                return SystemKeyspace.getLocalHostId().toString();
+                return SystemKeyspace.getOrInitializeLocalHostId().toString();
             }
-        } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException | java.lang.NoClassDefFoundError e) { 
+        } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException | java.lang.NoClassDefFoundError e) {
         }
         Loggers.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId, use a random one");
         if (settings != null && settings.hasValue(NODE_ID_SEED_SETTING.getKey())) {

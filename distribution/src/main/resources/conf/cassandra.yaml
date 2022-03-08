@@ -367,7 +367,12 @@ counter_cache_save_period: 7200
 # If not set, the default directory is $CASSANDRA_HOME/data/saved_caches.
 # saved_caches_directory: /var/lib/cassandra/saved_caches
 
-# commitlog_sync may be either "periodic" or "batch." 
+# Number of seconds the server will wait for each cache (row, key, etc ...) to load while starting
+# the Cassandra process. Setting this to a negative value is equivalent to disabling all cache loading on startup
+# while still having the cache during runtime.
+# cache_load_timeout_seconds: 30
+
+# commitlog_sync may be either "periodic" or "batch."
 # 
 # When in batch mode, Cassandra won't ack writes until the commit log
 # has been fsynced to disk.  It will wait
@@ -1164,6 +1169,26 @@ transparent_data_encryption_options:
 tombstone_warn_threshold: 1000
 tombstone_failure_threshold: 100000
 
+# Filtering and secondary index queries at read consistency levels above ONE/LOCAL_ONE use a
+# mechanism called replica filtering protection to ensure that results from stale replicas do
+# not violate consistency. (See CASSANDRA-8272 and CASSANDRA-15907 for more details.) This
+# mechanism materializes replica results by partition on-heap at the coordinator. The more possibly
+# stale results returned by the replicas, the more rows materialized during the query.
+replica_filtering_protection:
+    # These thresholds exist to limit the damage severely out-of-date replicas can cause during these
+    # queries. They limit the number of rows from all replicas individual index and filtering queries
+    # can materialize on-heap to return correct results at the desired read consistency level.
+    #
+    # "cached_replica_rows_warn_threshold" is the per-query threshold at which a warning will be logged.
+    # "cached_replica_rows_fail_threshold" is the per-query threshold at which the query will fail.
+    #
+    # These thresholds may also be adjusted at runtime using the StorageService mbean.
+    #
+    # If the failure threshold is breached, it is likely that either the current page/fetch size
+    # is too large or one or more replicas is severely out-of-sync and in need of repair.
+    cached_rows_warn_threshold: 2000
+    cached_rows_fail_threshold: 32000
+
 # Log WARN on any multiple-partition batch size exceeding this value. 5kb per batch by default.
 # Caution should be taken on increasing the size of this threshold as it can lead to node instability.
 batch_size_warn_threshold_in_kb: 5
@@ -1257,3 +1282,7 @@ enable_materialized_views: false
 # Enables SASI index creation on this node.
 # SASI indexes are considered experimental and are not recommended for production use.
 enable_sasi_indexes: false
+
+# Enables the used of 'ALTER ... DROP COMPACT STORAGE' statements on this node.
+# 'ALTER ... DROP COMPACT STORAGE' is considered experimental and is not recommended for production use.
+enable_drop_compact_storage: false

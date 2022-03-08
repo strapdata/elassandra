@@ -314,11 +314,13 @@ public class ElassandraDaemon extends CassandraDaemon {
                     }
 
                     // if our schema hasn't matched yet, wait until it has
+                    /* Replaced by the MigrationCoordinator schema puller
                     if (!MigrationManager.isReadyForBootstrap())
                     {
                         logger.info("waiting for schema information to complete");
                         MigrationManager.waitUntilReadyForBootstrap();
                     }
+                     */
                     this.hasMetadata = this.node.clusterService().hasMetaDataTable();
                 } catch(Throwable e)
                 {
