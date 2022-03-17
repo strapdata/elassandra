@@ -57,7 +57,7 @@ before_install:
   # - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
   - wget -O ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
   - unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
-  - pip3 install --upgrade setuptools wheel
+  - pip3 install --upgrade setuptools wheel pip
   #- pip3 install sphinx~=4.3.1 sphinx_rtd_theme
   - sudo fallocate -l 4G /swapfile
   - sudo chmod 600 /swapfile
@@ -71,6 +71,7 @@ install:
 
 script:
   #- (cd docs/elassandra; make clean html SPHINXOPTS="-W")
+  - (cd server/cassandra; JAVA_HOME=$JAVA8_HOME ant mvn-install)
   - JAVA_HOME=$JAVA9_HOME JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED" ./gradlew server:test -Dbuild.snapshot=false
   - JAVA_HOME=$JAVA9_HOME JAVA_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED" ./gradlew assemble -Dbuild.snapshot=false
   - JAVA_HOME=$JAVA8_HOME ./integ-test/test-cleanup-repair.sh $(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
