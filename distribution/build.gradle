@@ -187,6 +187,12 @@ configure(distributions) {
         from '../../server/cassandra/lib'
         include '*.zip'
       }
+
+      // copy the hacked cassandra-driver-internal-only-3.11.0-bb96859b.zip
+      with copySpec {
+        from '../../server/cassandra/lib2'
+        include '*.zip'
+      }
       
       // Add dependency on cassandra-driver for UDF
       with copySpec {
