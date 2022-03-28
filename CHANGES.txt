@@ -1,3 +1,6 @@
+6.2.3.38 - 2022-03-28
+  * Fix the cqlsh embedded driver
+
 6.2.3.37 - 2022-03-16
   * Upgrade to cassandra 3.11.9.12 to fix CVE-2021-44521
 
