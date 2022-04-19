@@ -245,3 +245,5 @@ the License.
 * Elasticsearch, Logstash, Beats and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other countries.
 * Apache Cassandra, Apache Lucene, Apache, Lucene and Cassandra are trademarks of the Apache Software Foundation.
 * Elassandra is a trademark of Strapdata SAS.
+
+
