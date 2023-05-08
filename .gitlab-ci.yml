@@ -8,9 +8,9 @@ variables:
     -Dhttp.proxyPort=3128
     -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
   DOCKER_REGISTRY: docker-dev-snapshot-local.logistics.corp
-  RELEASE="-Dbuild.snapshot=false"
+  RELEASE: -Dbuild.snapshot=false
 
-publish:
+elassandra_publish:
   stage: deploy
   image: docker-dev-snapshot-local.kdc.logistics.corp/strapdata/elassandra_builder:latest
   before_script:
