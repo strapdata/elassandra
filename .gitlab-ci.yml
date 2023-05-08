@@ -1,0 +1,30 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  GRADLE_OPTS: >-
+    -Dorg.gradle.daemon=false
+    -Dhttps.proxyHost=iahlproxy.logistics.corp
+    -Dhttps.proxyPort=3128
+    -Dhttp.proxyHost=iahlproxy.logistics.corp
+    -Dhttp.proxyPort=3128
+    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
+  DOCKER_REGISTRY: docker-dev-snapshot-local.logistics.corp
+  RELEASE="-Dbuild.snapshot=false"
+
+publish:
+  stage: deploy
+  image: docker-dev-snapshot-local.kdc.logistics.corp/strapdata/elassandra_builder:latest
+  before_script:
+    - keytool -import -noprompt -trustcacerts -alias cevaroot -file logistics-corp.pem -keystore $JAVA9_HOME/jre/lib/security/cacerts
+    - JAVA_HOME=$JAVA9_HOME elassandra/gradlew --version
+    - docker login docker-dev-snapshot-local.logistics.corp -u $DOCKER_USERNAME -p "$DOCKER_PASSWORD"
+  script:
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew assemble $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:reindex:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:lang-mustache:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:percolator:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:parent-join:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:rank-eval:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:transport-netty4:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+  tags:
+    - k8s-iah-east
