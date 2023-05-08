@@ -120,6 +120,9 @@ if (project == rootProject) {
     if (System.getProperty("repos.mavenLocal") != null) {
       mavenLocal()
     }
+    if (project.hasProperty('extraRepoUrl')) {
+      maven { url "${extraRepoUrl}" }
+    }
     mavenCentral()
   }
   test.exclude 'org/elasticsearch/test/NamingConventionsCheckBadClasses*'

@@ -196,7 +196,7 @@ configure(distributions) {
       
       // Add dependency on cassandra-driver for UDF
       with copySpec {
-        from '../../server/cassandra/lib'
+        from '../../server/cassandra/build/lib/jars'
         include 'cassandra-driver-core-3.0.1-shaded.jar'
       }
     }
