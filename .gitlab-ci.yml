@@ -2,7 +2,12 @@ variables:
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/${CI_COMMIT_TAG:1}"
   GIT_SUBMODULE_STRATEGY: recursive
   GRADLE_OPTS: >-
-    -Dorg.gradle.daemon=false
+    -Dhttps.proxyHost=iahlproxy.logistics.corp
+    -Dhttps.proxyPort=3128
+    -Dhttp.proxyHost=iahlproxy.logistics.corp
+    -Dhttp.proxyPort=3128
+    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
+  JAVA_TOOL_OPTIONS: >-
     -Dhttps.proxyHost=iahlproxy.logistics.corp
     -Dhttps.proxyPort=3128
     -Dhttp.proxyHost=iahlproxy.logistics.corp
