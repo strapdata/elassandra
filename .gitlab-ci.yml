@@ -15,6 +15,9 @@ variables:
     -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
   DOCKER_REGISTRY: docker-dev-snapshot-local.logistics.corp
   RELEASE: -Dbuild.snapshot=false
+  http_proxy: http://iahlproxy.logistics.corp:3128
+  https_proxy: http://iahlproxy.logistics.corp:3128
+  no_proxy: 127.0.0.1,localhost,.cevalogistics.com,.logistics.corp,.kdc.logistics.corp
 
 stages:
   - publish
