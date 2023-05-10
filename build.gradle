@@ -89,7 +89,7 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
            } else if(project.version.endsWith('-SNAPSHOT')) {
              url "${extraSnapshotRepoUrl}"
            } else {
-             url "${extraReleaseRepoUrl}"
+             url "${extraRepoUrl}"
           }
            }
       }
