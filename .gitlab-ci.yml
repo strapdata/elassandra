@@ -20,7 +20,6 @@ publish:
   stage: publish
   image: docker-dev-snapshot-local.kdc.logistics.corp/strapdata/elassandra_builder:latest
   before_script:
-    - docker login docker-dev-snapshot-local.logistics.corp -u $DOCKER_USERNAME -p "$DOCKER_PASSWORD"
     - JAVA_HOME=$JAVA9_HOME ./gradlew --version
   script:
     - JAVA_HOME=$JAVA9_HOME ./gradlew assemble $RELEASE
