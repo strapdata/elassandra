@@ -6,13 +6,13 @@ variables:
     -Dhttps.proxyPort=3128
     -Dhttp.proxyHost=iahlproxy.logistics.corp
     -Dhttp.proxyPort=3128
-    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
+    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com
   JAVA_TOOL_OPTIONS: >-
     -Dhttps.proxyHost=iahlproxy.logistics.corp
     -Dhttps.proxyPort=3128
     -Dhttp.proxyHost=iahlproxy.logistics.corp
     -Dhttp.proxyPort=3128
-    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
+    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com
   DOCKER_REGISTRY: docker-dev-snapshot-local.logistics.corp
   RELEASE: -Dbuild.snapshot=false
   http_proxy: http://iahlproxy.logistics.corp:3128
