@@ -1,4 +1,5 @@
 variables:
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/${CI_COMMIT_TAG:1}"
   GIT_SUBMODULE_STRATEGY: recursive
   GRADLE_OPTS: >-
     -Dorg.gradle.daemon=false
@@ -10,8 +11,13 @@ variables:
   DOCKER_REGISTRY: docker-dev-snapshot-local.logistics.corp
   RELEASE: -Dbuild.snapshot=false
 
-elassandra_publish:
-  stage: deploy
+stages:
+  - publish
+  - upload
+  - release
+
+publish:
+  stage: publish
   image: docker-dev-snapshot-local.kdc.logistics.corp/strapdata/elassandra_builder:latest
   before_script:
     - keytool -import -noprompt -trustcacerts -alias cevaroot -file logistics-corp.pem -keystore $JAVA9_HOME/jre/lib/security/cacerts
@@ -26,5 +32,35 @@ elassandra_publish:
     - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:parent-join:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
     - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:rank-eval:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
     - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:transport-netty4:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+  artifacts:
+    paths:
+      - distribution/tar/build/distributions/*.tar.gz
+      - distribution/zip/build/distributions/*.zip
   tags:
     - k8s-iah-east
+
+# CI_COMMIT_TAG should be v6.2.3.x
+# distribution/tar/build/distributions/elassandra-6.2.3.39.tar.gz
+upload:
+  stage: upload
+  image: curlimages/curl:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - |
+      curl -k --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "distribution/tar/build/distributions/elassandra-${CI_COMMIT_TAG:1}.tar.gz" "${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.tar.gz"
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - env
+    - |
+      release-cli --additional-ca-cert-bundle $CI_PROJECT_DIR/logistics-corp.pem create \
+        --name "Release $CI_COMMIT_TAG" \
+        --tag-name "$CI_COMMIT_TAG" \
+        --assets-link "{\"name\":\"elassandra-${CI_COMMIT_TAG:1}.tar.gz\",\"url\":\"${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.tar.gz\"}"
+
+
