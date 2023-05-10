@@ -24,14 +24,14 @@ publish:
     - JAVA_HOME=$JAVA9_HOME elassandra/gradlew --version
     - docker login docker-dev-snapshot-local.logistics.corp -u $DOCKER_USERNAME -p "$DOCKER_PASSWORD"
   script:
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew assemble $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:reindex:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:lang-mustache:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:percolator:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:parent-join:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:rank-eval:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
-    - (cd elassandra; JAVA_HOME=$JAVA9_HOME ./gradlew :modules:transport-netty4:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE)
+    - JAVA_HOME=$JAVA9_HOME ./gradlew assemble $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:reindex:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:lang-mustache:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:percolator:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:parent-join:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:rank-eval:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:transport-netty4:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
   artifacts:
     paths:
       - distribution/tar/build/distributions/*.tar.gz
