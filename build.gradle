@@ -69,10 +69,7 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
    apply plugin: 'signing'
 
    repositories {
-     mavenLocal()
-     if (project.hasProperty('extraRepoUrl')) {
-         maven { url "${extraRepoUrl}" }
-     }
+       mavenLocal()
    }
 
   // we only use maven publish to add tasks for pom generation
@@ -89,9 +86,9 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
            } else if(project.version.endsWith('-SNAPSHOT')) {
              url "${extraSnapshotRepoUrl}"
            } else {
-             url "${extraRepoUrl}"
-          }
+             url "${extraReleaseRepoUrl}"
            }
+        }
       }
       publications {
         // add license information to generated poms

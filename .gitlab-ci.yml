@@ -6,18 +6,17 @@ variables:
     -Dhttps.proxyPort=3128
     -Dhttp.proxyHost=iahlproxy.logistics.corp
     -Dhttp.proxyPort=3128
-    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com
-  JAVA_TOOL_OPTIONS: >-
+    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
+  ANT_OPTS: >-
     -Dhttps.proxyHost=iahlproxy.logistics.corp
     -Dhttps.proxyPort=3128
     -Dhttp.proxyHost=iahlproxy.logistics.corp
     -Dhttp.proxyPort=3128
-    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com
+    -Dhttp.nonProxyHosts="localhost|*.logistics.corp|*.kdc.logistics.corp|*.cevalogistics.com"
   DOCKER_REGISTRY: docker-dev-snapshot-local.logistics.corp
-  RELEASE: -Dbuild.snapshot=false
-  http_proxy: http://iahlproxy.logistics.corp:3128
-  https_proxy: http://iahlproxy.logistics.corp:3128
-  no_proxy: 127.0.0.1,localhost,.cevalogistics.com,.logistics.corp,.kdc.logistics.corp
+  CASSANDRA_VERSION: 3.11.12.4
+  GRADLE_RELEASE: -Dbuild.snapshot=false
+  ANT_RELEASE: -Drelease=true
 
 stages:
   - publish
@@ -26,22 +25,25 @@ stages:
 
 publish:
   stage: publish
-  image: docker-dev-snapshot-local.kdc.logistics.corp/strapdata/elassandra_builder:latest
+  image: docker-dev-snapshot-local.logistics.corp/strapdata/elassandra_builder:latest
   before_script:
-    - JAVA_HOME=$JAVA9_HOME ./gradlew --version
+    - keytool -import -noprompt -trustcacerts -alias cevaroot -file /logistics-corp.pem -keystore $JAVA_HOME/jre/lib/security/cacerts -storepass changeit
+    - (cd server/cassandra; ant mvn-install $ANT_RELEASE)
+    - (cd server/cassandra; ./mvn-install.sh)
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS --version
   script:
-    - JAVA_HOME=$JAVA9_HOME ./gradlew assemble $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:reindex:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:lang-mustache:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:percolator:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:parent-join:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:rank-eval:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
-    - JAVA_HOME=$JAVA9_HOME ./gradlew :modules:transport-netty4:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS assemble $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS :modules:reindex:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS :modules:lang-mustache:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS :modules:percolator:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS :modules:parent-join:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS :modules:rank-eval:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
+    - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS :modules:transport-netty4:publish -PrepoUsername=$MAVEN_USERNAME  -PrepoPassword=$MAVEN_PASSWORD $GRADLE_RELEASE
   artifacts:
     paths:
-      - distribution/tar/build/distributions/*.tar.gz
-      - distribution/zip/build/distributions/*.zip
+      - distribution/tar/build/distributions
+      - distribution/zip/build/distributions
   tags:
     - k8s-iah-east
 
@@ -52,9 +54,13 @@ upload:
   image: curlimages/curl:latest
   rules:
     - if: $CI_COMMIT_TAG
+  before_script:
+    - ls -lrt distribution/tar/build/distributions
   script:
     - |
       curl -k --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "distribution/tar/build/distributions/elassandra-${CI_COMMIT_TAG:1}.tar.gz" "${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.tar.gz"
+  tags:
+    - k8s-iah-east
 
 release:
   stage: release
@@ -68,5 +74,7 @@ release:
         --name "Release $CI_COMMIT_TAG" \
         --tag-name "$CI_COMMIT_TAG" \
         --assets-link "{\"name\":\"elassandra-${CI_COMMIT_TAG:1}.tar.gz\",\"url\":\"${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.tar.gz\"}"
+  tags:
+    - k8s-iah-east
 
 
