@@ -44,6 +44,7 @@ publish:
     paths:
       - distribution/tar/build/distributions
       - distribution/zip/build/distributions
+      - distribution/deb/build/distributions
   tags:
     - k8s-iah-east
 
@@ -55,10 +56,10 @@ upload:
   rules:
     - if: $CI_COMMIT_TAG
   before_script:
-    - ls -lrt distribution/tar/build/distributions
+    - ls -lrt distribution/deb/build/distributions
   script:
     - |
-      curl -k --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "distribution/tar/build/distributions/elassandra-${CI_COMMIT_TAG:1}.tar.gz" "${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.tar.gz"
+      curl -k --header "JOB-TOKEN: ${CI_JOB_TOKEN}" -H 'Content-Type: application/octet-stream' --upload-file "distribution/deb/build/distributions/elassandra-${CI_COMMIT_TAG:1}.deb" "${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.deb"
   tags:
     - k8s-iah-east
 
@@ -73,8 +74,6 @@ release:
       release-cli --additional-ca-cert-bundle $CI_PROJECT_DIR/logistics-corp.pem create \
         --name "Release $CI_COMMIT_TAG" \
         --tag-name "$CI_COMMIT_TAG" \
-        --assets-link "{\"name\":\"elassandra-${CI_COMMIT_TAG:1}.tar.gz\",\"url\":\"${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.tar.gz\"}"
+        --assets-link "{\"name\":\"elassandra-${CI_COMMIT_TAG:1}.deb\",\"url\":\"${PACKAGE_REGISTRY_URL}/elassandra-${CI_COMMIT_TAG:1}.deb\"}"
   tags:
     - k8s-iah-east
-
-
