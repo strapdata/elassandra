@@ -28,6 +28,8 @@ publish:
   image: docker-dev-snapshot-local.logistics.corp/strapdata/elassandra_builder:latest
   before_script:
     - keytool -import -noprompt -trustcacerts -alias cevaroot -file /logistics-corp.pem -keystore $JAVA_HOME/jre/lib/security/cacerts -storepass changeit
+    - sed -i '/\[openssl_init\]/a ssl_conf = ssl_sect' /etc/ssl/openssl.cnf
+    - sed -i -e '$a [ssl_sect]\nsystem_default = system_default_sect\n\n[system_default_sect]\nOptions = UnsafeLegacyServerConnect' /etc/ssl/openssl.cnf
     - (cd server/cassandra; ant mvn-install $ANT_RELEASE)
     - (cd server/cassandra; ./mvn-install.sh)
     - JAVA_HOME=$JAVA9_HOME ./gradlew $GRADLE_OPTS --version
