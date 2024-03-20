@@ -1,7 +1,7 @@
 Search through CQL
 ==================
 
-Executing Elasticsearch queries through through the Cassandra CQL driver provides several benefits:
+Executing Elasticsearch queries through the Cassandra CQL driver provides several benefits:
 
 * Eliminates the needs for an HTTP load balancer because the drivers are cluster aware and will load balance for you.
 * Simplify the development of your application by using the same Data Access Objects for CQL and Elasticsearch requests.
