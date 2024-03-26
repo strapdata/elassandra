@@ -8,7 +8,7 @@
 Elassandra is an [Apache Cassandra](http://cassandra.apache.org) distribution including an [Elasticsearch](https://github.com/elastic/elasticsearch) search engine.
 Elassandra is a multi-master multi-cloud database and search engine with support for replicating across multiple datacenters in active/active mode.
 
-Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serves as an Elasticsearch data and configuration store.
+Elasticsearch code is embedded in Cassandra nodes providing advanced search features on Cassandra tables and Cassandra serves as an Elasticsearch data and configuration store.
 
 ![Elassandra architecture](/docs/elassandra/source/images/elassandra1.jpg)
 
