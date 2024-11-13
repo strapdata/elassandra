@@ -820,6 +820,8 @@ public class RestClient implements Closeable {
             }
 
             URIBuilder uriBuilder = new URIBuilder(fullPath);
+            removeUnsupportedParams(params);
+
             for (Map.Entry<String, String> param : params.entrySet()) {
                 uriBuilder.addParameter(param.getKey(), param.getValue());
             }
@@ -1085,8 +1087,19 @@ public class RestClient implements Closeable {
     @Deprecated
     private static void addParameters(Request request, Map<String, String> parameters) {
         Objects.requireNonNull(parameters, "parameters cannot be null");
+        removeUnsupportedParams(parameters);
         for (Map.Entry<String, String> entry : parameters.entrySet()) {
             request.addParameter(entry.getKey(), entry.getValue());
+        }
+    }
+
+    private static void removeUnsupportedParams(Map<String, String> params) {
+        if (System.getProperty("backward_compatibility") != null) {
+            params.remove("master_timeout");
+            params.remove("ignore_throttled");
+            params.remove("ccs_minimize_roundtrips");
+            params.remove("include_type_name");
+            params.remove("rest_total_hits_as_int");
         }
     }
 }
