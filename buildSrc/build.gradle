@@ -125,9 +125,11 @@ dependencies {
   compile 'com.perforce:p4java:2012.3.551082' // THIS IS SUPPOSED TO BE OPTIONAL IN THE FUTURE....
   compile 'org.apache.rat:apache-rat:0.11'
   compile "org.elasticsearch:jna:4.5.1"
-  compile 'com.github.jengelman.gradle.plugins:shadow:2.0.4'
+  //compile 'com.github.jengelman.gradle.plugins:shadow:2.0.4'
+  compile files("libs/shadow-2.0.4.jar")
   compile 'de.thetaphi:forbiddenapis:2.6'
-  compile 'com.avast.gradle:gradle-docker-compose-plugin:0.8.12'
+  //compile 'com.avast.gradle:gradle-docker-compose-plugin:0.8.12'
+  compile files("libs/gradle-docker-compose-plugin-0.8.12.jar")
   testCompile "junit:junit:${props.getProperty('junit')}"
 }
 
@@ -139,7 +141,7 @@ GradleVersion logVersion = GradleVersion.current() > GradleVersion.version('4.3'
 
 dependencies {
   //compileOnly "org.gradle:gradle-logging:${logVersion.getVersion()}"
-  compileOnly file("libs/gradle-logging-4.3.jar")
+  compileOnly files("libs/gradle-logging-4.3.jar")
 }
 
 /*****************************************************************************
