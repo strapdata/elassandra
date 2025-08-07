@@ -1,0 +1,39 @@
+on: [push]
+env:
+  MAVEN_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+  MAVEN_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+  ORG_GRADLE_PROJECT_mavenUsername: ${{ secrets.REGISTRY_USERNAME }}
+  ORG_GRADLE_PROJECT_mavenPassword: ${{ secrets.REGISTRY_PASSWORD }}
+jobs:
+  test:
+    runs-on: elassandra-builder
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: setenv
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          echo "GRADLE_RELEASE=-Dbuild.snapshot=false" >> $GITHUB_ENV
+          echo "TAG=${{ env.GITHUB_REF_NAME }}" >> $GITHUB_ENV
+
+      - name: env
+        run: env
+
+      - name: test
+        run: JAVA_HOME=$JAVA12_HOME ./gradlew $GRADLE_OPTS server:test $GRADLE_RELEASE --stacktrace
+
+      - name: upload test report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          path: server/build/reports/testJunit/TEST-*
+          retention-days: 3
+
+        # Deploy release only
+      - name: deploy
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          JAVA_HOME=$JAVA12_HOME ./gradlew $GRADLE_OPTS publishNebulaPublicationToTargetRepository -PrepoUsername="${MAVEN_USERNAME}" -PrepoPassword="${MAVEN_PASSWORD}" -PrepoUrl="https://git.exostrive.com/api/packages/strapdata/maven"
