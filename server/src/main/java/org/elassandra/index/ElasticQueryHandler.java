@@ -214,6 +214,11 @@ public class ElasticQueryHandler extends QueryProcessor {
                     .setSource(ssb)
                     .setTypes(index.typeName);
 
+                // use the query size parameter if available.
+                if (ssb.size() >= 0) {
+                    srb.setSize(ssb.size());
+                }
+
                 AbstractBounds bounds = select.getRestrictions().getPartitionKeyBounds(options);
                 if (bounds != null) {
                     Token left = ((PartitionPosition) bounds.left).getToken();
