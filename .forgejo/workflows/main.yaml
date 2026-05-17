@@ -23,7 +23,7 @@ jobs:
         run: env
 
       - name: test
-        run: JAVA_HOME=$JAVA12_HOME ./gradlew $GRADLE_OPTS server:test $GRADLE_RELEASE --stacktrace
+        run: JAVA_HOME=$JAVA11_HOME ./gradlew $GRADLE_OPTS server:test $GRADLE_RELEASE --stacktrace
 
       - name: upload test report
         if: always()
@@ -36,4 +36,4 @@ jobs:
       - name: deploy
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: |
-          JAVA_HOME=$JAVA12_HOME ./gradlew $GRADLE_OPTS publishNebulaPublicationToTargetRepository -PrepoUsername="${MAVEN_USERNAME}" -PrepoPassword="${MAVEN_PASSWORD}" -PrepoUrl="https://git.exostrive.com/api/packages/strapdata/maven"
+          JAVA_HOME=$JAVA11_HOME ./gradlew $GRADLE_OPTS publishNebulaPublicationToTargetRepository -PrepoUsername="${MAVEN_USERNAME}" -PrepoPassword="${MAVEN_PASSWORD}" -PrepoUrl="https://git.exostrive.com/api/packages/strapdata/maven"
